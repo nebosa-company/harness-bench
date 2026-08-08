@@ -140,9 +140,31 @@ def load_runs(harness: str) -> dict:
             checks_failed=len(failed),
             first_fail=(str(failed[0].get("label") or failed[0].get("id") or "")[:80] if failed else ""),
             first_detail=(str(failed[0].get("detail"))[:110] if failed and failed[0].get("detail") else ""),
+            gap=quality_gap(j),
             sig=sig,
         )
     return out
+
+
+def quality_gap(j: dict) -> dict | None:
+    """Whether this task's semantic half was graded, and if not, why.
+
+    Two tasks are weighted `outcome_llm_weight = 0.9`: almost all of their score
+    is a vision-capable LLM's judgement of the answer, and only the remaining
+    tenth is programmatic. When that judge does not run, `_blend_outcome` falls
+    back to the programmatic part *alone* and reports it as the whole score —
+    so a task that is 90% semantic quality is graded on whether two files exist.
+
+    Measured: `008-image-recognize` scored 100% on a backend whose answer called
+    a kitten a dog, because both answer files were present and non-empty. The
+    number is an artifact of the missing judge, not a capability.
+    """
+    o = j.get("oracle_result") or {}
+    w = o.get("outcome_llm_weight") or 0
+    if not w or isinstance(o.get("quality"), (int, float)):
+        return None
+    meta = o.get("quality_rubric_meta") or {}
+    return {"weight": w, "reason": str(meta.get("reason") or "the quality judge did not run")[:80]}
 
 
 def load_rubric(harness: str) -> dict:
@@ -251,7 +273,7 @@ def main() -> None:
             "el": run["el"], "tot": run["tot"], "usd": run["usd"],
             "turns": run["turns"], "calls": run["calls"],
             "checks": f"{run['checks_pass']}/{run['checks_total']}",
-            "cause": cause, "verdict": verdict, "why": why,
+            "cause": cause, "verdict": verdict, "why": why, "gap": run["gap"],
         }
         for name, harness in HARNESSES[1:]:
             r = runs[harness].get(tid)
@@ -304,6 +326,7 @@ def main() -> None:
             "component": v[0].get("rate") == "component",
             "unpriced": v[0].get("rate") is None and sum(x["usd"] for x in v) == 0,
             # A single process mean flattens a distribution that is not unimodal.
+            "ungraded": sum(1 for x in v if x["gap"]),
             "proc_sig": mean([rb.get(k, {}).get("process") for k in sig3]),
             "proc_rest": mean([rb.get(k, {}).get("process") for k in r if k not in sig3]),
         })

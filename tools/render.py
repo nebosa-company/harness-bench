@@ -161,6 +161,16 @@ def leaderboard():
     return "".join(out)
 
 
+def gap_mark(gap):
+    """Flag a score whose semantic half was never graded."""
+    if not gap:
+        return ""
+    prog = (1 - gap["weight"]) * 100
+    tip = (f'only the programmatic {prog:.0f}% of this task was graded; the remaining '
+           f'{gap["weight"] * 100:.0f}% needed a judge that did not run ({gap["reason"]})')
+    return f'<span class="gap" title="{html.escape(tip)}">⚠</span>'
+
+
 def task_table():
     others = [a for a in AGG[1:]]
     keys = [a["harness"].replace("perpetum-", "") for a in others]
@@ -173,6 +183,7 @@ def task_table():
             last = r["domain"]
             trs.append(f'<tr class="grp"><td colspan="{span}">{html.escape(last)}</td></tr>')
         b = band(r["score"])
+        gap = r.get("gap")
         d = None if r["base"] is None else r["score"] - r["base"]
         dcls = "" if d is None or abs(d) < .005 else ("up" if d > 0 else "down")
         dtxt = "—" if d is None or abs(d) < .005 else f"{d * 100:+.0f}"
@@ -190,7 +201,7 @@ def task_table():
             f'<td class="num"><span class="stripe {b}"></span>{r["n"]:03d}</td>'
             f'<td class="t"><span class="tt">{html.escape(r["title"])}</span>'
             f'<span class="tid">{html.escape(r["id"])}</span></td>'
-            f'<td class="n"><b>{r["score"] * 100:.0f}%</b></td>'
+            f'<td class="n"><b>{r["score"] * 100:.0f}%</b>{gap_mark(gap)}</td>'
             f'<td class="n {dcls}">{dtxt}</td>'
             f'{cmp_cells}'
             f'<td class="n dim">{fmt(r["process"], "pc")}</td>'
@@ -294,6 +305,7 @@ td.t { min-width:180px; }
 .tt { display:block; font-weight:600; }
 .tid { display:block; font:400 11.5px/1.5 Consolas,ui-monospace,monospace; color:var(--muted); }
 .sig { color:var(--sig); font-weight:700; margin-left:3px; }
+.gap { color:var(--mid); font-weight:700; margin-left:4px; cursor:help; }
 td.why { max-width:360px; }
 .verdict { display:inline-block; font:600 10.5px/1 "Segoe UI",sans-serif; letter-spacing:.06em;
   text-transform:uppercase; padding:4px 8px; border-radius:3px; margin-bottom:6px;
@@ -397,6 +409,13 @@ PAGE = Template("""<title>Perpetum on Harness-Bench — $n tasks, $backends back
 
   <section id="tasks">
     <h2>Every task</h2>
+    <p class="note"><b>⚠ marks a task whose score means less than it says.</b> A handful of
+      tasks carry <code>outcome_llm_weight</code> above zero: most of their score is a
+      vision-capable model's judgement of the answer, and only the remainder is programmatic. That
+      judge has not run here, and the blend falls back to the programmatic part alone and reports
+      it as the whole score. <code>008-image-recognize</code> is the clear case — one backend
+      scored 100% on an answer that called a kitten a dog, because both answer files existed and
+      were non-empty. Those rows are not evidence about any backend.</p>
     <p class="note">Scores are the oracle's, as percentages. <b>Δ</b> compares the primary backend
       against an earlier run made before the benchmark's workspaces were moved out of an enclosing
       git checkout — inside it, every write was discarded as ignored and steps that had written
