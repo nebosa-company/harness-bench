@@ -4,5 +4,5 @@
   "default_timeout_sec": 2400,
   "default_rounds": 1,
   "results_dir": "data_try6/results",
-  "work_root": "data_try6/sandbox"
+  "work_root": "D:/harness-bench-work/sandbox"
 }
