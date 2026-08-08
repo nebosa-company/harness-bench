@@ -108,6 +108,128 @@
       "command": "my-agent-cli",
       "session_prefix": "harnessbench",
       "args": ["run", "--workspace", "{workspace}", "--prompt-file", "{prompt_file}"]
+    },
+
+    # Perpetum (`perp`) is a loop harness, not a chat agent: it will not run
+    # work that is not on the record. The adapter binds each task's workspace
+    # with `perp init`, mints one requirement id per round, and runs
+    # `perp run --requirement`. `links`/`roles` are written into the sandbox's
+    # `.harness/links.md`, and tokens, cost and per-call latency are read back
+    # out of the journal Perpetum keeps of the run.
+    "perpetum-deepseek": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp",
+      "timeout_sec": 1800,
+      "links": {
+        "deepseek": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-flash",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28 }
+        }
+      },
+      "roles": { "coder": "deepseek", "chat": "deepseek", "verifier": "deepseek" },
+      # On, because `usage-proxy/responses/` is what the process rubric reads.
+      # The adapter marks its routes `stream`, so the proxy relays tokens as
+      # they arrive instead of buffering — a buffered reply reads as twenty
+      # seconds of silence to Perpetum and trips `M-23`. Set false to bypass the
+      # proxy entirely; usage is then read from Perpetum's journal and the
+      # process rubric is skipped.
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 1.00, "batch_money": 1.00 },
+      "map_budget": 0
+    },
+
+    # DeepSeek's larger model. Prices are the regular (off-peak) rates effective
+    # 2026-07-31, corroborated by two independent sources; the same check
+    # returned this config's existing v4-flash figures unchanged, which is why
+    # they are trusted. A 2x peak-hour tier has been announced with no effective
+    # date, so a run made after one is set will be undercounted until these
+    # lines are revisited (`M-14`: provider facts belong in configuration).
+    "perpetum-deepseek-pro": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-pro",
+      "timeout_sec": 1800,
+      "links": {
+        "deepseek": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-pro",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87 }
+        }
+      },
+      "roles": { "coder": "deepseek", "chat": "deepseek", "verifier": "deepseek" },
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
+    # Opus, driven through the `claude` CLI as a subprocess. No `base_url` and
+    # no `auth_env`: the CLI holds its own credential and signs in as you, so
+    # this runs against the subscription rather than metered API tokens.
+    # A `claude-cli` link is not an address, so it cannot go through the bench
+    # usage proxy — tokens and per-call latency come from Perpetum's journal,
+    # and the process rubric is skipped for want of a response trace.
+    "perpetum-opus": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-opus",
+      "timeout_sec": 2400,
+      "links": {
+        "claude": { "kind": "claude-cli", "model": "opus" }
+      },
+      "roles": { "coder": "claude", "chat": "claude", "verifier": "claude" },
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
+    # Sonnet through the same `claude-cli` link kind as `perpetum-opus`. Same
+    # caveats: a subprocess rather than an address, so no usage proxy, no
+    # process rubric, and usage read back out of Perpetum's journal.
+    "perpetum-sonnet": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-sonnet",
+      "timeout_sec": 2400,
+      "links": {
+        "claude": { "kind": "claude-cli", "model": "sonnet" }
+      },
+      "roles": { "coder": "claude", "chat": "claude", "verifier": "claude" },
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
+    # The same harness against a model on this machine. `--local-only` is what
+    # Perpetum calls a run that may not reach a cloud link at all, so a role
+    # with no local option fails loudly instead of quietly going to the wire.
+    "perpetum-lmstudio": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-local",
+      "timeout_sec": 3600,
+      "local_only": true,
+      "links": {
+        "here": {
+          "kind": "lmstudio",
+          "model": "qwen2.5-coder-32b",
+          "base_url": "http://localhost:1234",
+          "concurrency": 1
+        }
+      },
+      "roles": { "coder": "here", "chat": "here", "verifier": "here" }
+    },
+
+    # Bring your own `.harness/links.md` instead of declaring links inline.
+    # Copied verbatim, so it is the way to test a role chain, a failover order
+    # or a two-link verifier split (`V-5`) that the inline form cannot express.
+    "perpetum-links-file": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp",
+      "user_config": "config/perpetum-links.md",
+      "timeout_sec": 1800
     }
   }
 }
