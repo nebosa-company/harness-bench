@@ -25,6 +25,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+# `PATH` in an already-running shell predates anything installed since it
+# started — cloudflared was installed into `C:\Program Files (x86)\cloudflared`
+# and on the machine `PATH`, and `shutil.which` in this process still could not
+# see it. Checking the install locations as well means "I installed it" and "the
+# tool finds it" stop being different questions.
+_TUNNEL_DIRS = [
+    r"C:\Program Files (x86)\cloudflared",
+    r"C:\Program Files\cloudflared",
+    os.path.expandvars(r"%ProgramData%\chocolatey\bin"),
+    os.path.expanduser(r"~\scoop\shims"),
+]
+
+
+def _find_tunnel() -> str | None:
+    """cloudflared first: it needs no account, and ngrok without an authtoken
+    opens no tunnel while still answering `which`."""
+    for exe in ("cloudflared", "ngrok"):
+        found = shutil.which(exe)
+        if found:
+            return found
+        for d in _TUNNEL_DIRS:
+            cand = Path(d) / f"{exe}.exe"
+            if cand.is_file():
+                return str(cand)
+    return None
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__)
@@ -47,10 +74,15 @@ def main() -> int:
     # measurement, and only the second one may switch off a fallback.
     if "--tunnel" in extra:
         extra = [a for a in extra if a != "--tunnel"]
-        which = shutil.which("cloudflared") or shutil.which("ngrok")
+        which = _find_tunnel()
         if not which:
-            print("[run_round] --tunnel: no cloudflared or ngrok on PATH", flush=True)
+            print("[run_round] --tunnel: no cloudflared or ngrok found", flush=True)
             return 2
+        env["HARNESSBENCH_TUNNEL_CMD"] = (
+            f'"{which}" tunnel --url {{local_url}} --no-autoupdate'
+            if "cloudflared" in which.lower()
+            else f'"{which}" http {{local_url}} --log=stdout'
+        )
         print(f"[run_round] --tunnel: deferring to {which} (tasks fail if it "
               f"cannot open a tunnel)", flush=True)
     else:

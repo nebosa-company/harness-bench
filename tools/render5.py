@@ -127,7 +127,7 @@ def main() -> int:
         row("native rung", lambda v: f"{v:.0f}%", lambda b: b["native_pct"]),
         row("process measured", lambda v: f"{v} / 106", lambda b: b["process_measured"]),
         row("wall clock", lambda v: f"{v:.1f} h", lambda b: b["hours"], best="min"),
-        row("cost", lambda v: f"${v:.4f}", lambda b: COST[b["key"]][0], best="min"),
+        row("cost", lambda v: f"${v:,.2f}", lambda b: COST[b["key"]][0], best="min"),
     ]
     cost_notes = "".join(
         f'<tr><td class="id">{esc(b["label"])}</td><td>{esc(COST[b["key"]][1])}</td></tr>' for b in bs
