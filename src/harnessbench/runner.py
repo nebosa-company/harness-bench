@@ -110,6 +110,16 @@ def derive_api_result_slug(
     且若 harness 模型配置里声明了 ``model`` 并命中上述二者之一，则 **以配置为准**，
     不因网关在多轮里上报不同 ``response_model`` 而切换到另一目录。
     """
+    # A backend that mixes models per role has no single "the" model, and the
+    # proxy path below would name it after whichever one happened to answer
+    # last — a mixture round landed in `results/.../deepseek-v4-pro/` while its
+    # coder was Opus. `result_slug` lets such a config name itself, which is the
+    # only honest answer when the question has none.
+    if isinstance(model_cfg, dict):
+        declared = str(model_cfg.get("result_slug") or "").strip()
+        if declared:
+            return _sanitize_api_dir_segment(declared), declared
+
     requested = ""
     if isinstance(model_cfg, dict):
         requested = str(model_cfg.get("model") or "").strip()
