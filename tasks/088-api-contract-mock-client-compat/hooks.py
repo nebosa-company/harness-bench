@@ -15,7 +15,15 @@ from typing import Any
 
 
 _URL_RE = re.compile(r"https?://[^\s\"')]+")
-_TRYCLOUDFLARE_RE = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com", re.IGNORECASE)
+# Hosts whose URL a tunnel is expected to print on stdout. Cloudflare was the
+# only entry, and it was also hard-coded into both match branches below, so a
+# `HARNESSBENCH_TUNNEL_CMD` pointing at any other provider discovered its own
+# URL and then discarded it for failing the substring test.
+_TUNNEL_HOSTS = ("trycloudflare.com", "ngrok-free.app", "ngrok.io", "ngrok.app", "loca.lt")
+_TRYCLOUDFLARE_RE = re.compile(
+    r"https://[-a-z0-9.]+\.(?:" + "|".join(re.escape(h) for h in _TUNNEL_HOSTS) + r")",
+    re.IGNORECASE,
+)
 
 
 def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[str] | None]:
@@ -26,6 +34,11 @@ def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[s
     tunnel_cmd = os.environ.get("HARNESSBENCH_TUNNEL_CMD", "").strip()
     if not tunnel_cmd and shutil.which("cloudflared"):
         tunnel_cmd = "cloudflared tunnel --url {local_url} --no-autoupdate"
+    # `--log=stdout` is not optional: ngrok's default is a curses UI that never
+    # writes the URL to stdout, so the reader below would time out on a tunnel
+    # that came up perfectly.
+    if not tunnel_cmd and shutil.which("ngrok"):
+        tunnel_cmd = "ngrok http {local_url} --log=stdout"
     if not tunnel_cmd:
         raise RuntimeError(
             "no public mock URL configured: install cloudflared or set "
@@ -54,7 +67,7 @@ def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[s
         if cf_match:
             return cf_match.group(0).rstrip("/"), proc
         match = _URL_RE.search(line)
-        if match and "trycloudflare.com" in match.group(0).lower():
+        if match and any(h in match.group(0).lower() for h in _TUNNEL_HOSTS):
             return match.group(0).rstrip("/"), proc
 
     try:

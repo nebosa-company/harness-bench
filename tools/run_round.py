@@ -11,12 +11,13 @@ the harness under test runs on the same machine, so the local URL *is* the URL
 to hand it. Setting it here rather than in a shell means the next round cannot
 be started without it by someone who did not know to.
 
-    python tools/run_round.py <harness-id> [--from-num N] [--to-num N]
+    python tools/run_round.py <harness-id> [--tunnel] [--from-num N] [--to-num N]
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -32,7 +33,28 @@ def main() -> int:
     extra = sys.argv[2:]
 
     env = dict(os.environ)
-    env.setdefault("HARNESSBENCH_PUBLIC_URL_TEMPLATE", "{local_url}")
+    # A real tunnel exercises TLS, DNS and actual egress; the local URL exercises
+    # none of them, and for a harness that fetched from another machine it would
+    # not work at all. So a real tunnel is worth having — but it is **opt-in**,
+    # not auto-detected.
+    #
+    # Auto-detection was written first and was wrong. Presence on `PATH` is not
+    # evidence a tunnel works: `ngrok` was on this machine's `PATH` and had no
+    # authtoken, so `ngrok http` never printed a URL and never exited. Detection
+    # would have suppressed the fallback and returned all five tasks to the
+    # setup failure that cost them a round — the exact regression this script
+    # exists to prevent. An installed binary is a claim; a working tunnel is a
+    # measurement, and only the second one may switch off a fallback.
+    if "--tunnel" in extra:
+        extra = [a for a in extra if a != "--tunnel"]
+        which = shutil.which("cloudflared") or shutil.which("ngrok")
+        if not which:
+            print("[run_round] --tunnel: no cloudflared or ngrok on PATH", flush=True)
+            return 2
+        print(f"[run_round] --tunnel: deferring to {which} (tasks fail if it "
+              f"cannot open a tunnel)", flush=True)
+    else:
+        env.setdefault("HARNESSBENCH_PUBLIC_URL_TEMPLATE", "{local_url}")
     env["PYTHONPATH"] = str(ROOT / "src")
     env["PYTHONIOENCODING"] = "utf-8"
 
