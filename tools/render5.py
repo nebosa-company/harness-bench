@@ -18,12 +18,16 @@ OUT = pathlib.Path("D:/repos/perpetum.io/docs/build/perpetum-on-harness-bench-5-
 PRICES = {"pro": (0.003625, 0.435, 0.87), "flash": (0.0028, 0.14, 0.28)}
 
 # Cost per backend: (value, how it was arrived at)
+# What the round cost priced at API rates, so the five columns compare.
+# A subscription round bills per seat and journals $0.00 — true, and useless
+# next to a metered one, so the Claude traffic is priced at what the same
+# tokens would cost through the meter and labelled as imputed.
 COST = {
-    "opus": (None, "subscription — billed per seat, not per token"),
-    "sonnet": (None, "subscription — billed per seat, not per token"),
+    "opus": (69.64, "imputed — subscription, priced at API rates"),
+    "sonnet": (27.75, "imputed — subscription, priced at API rates"),
     "flash": (0.6399, "measured"),
     "pro": (1.1882, "reconstructed — the round predates its prices"),
-    "mixture": (0.4545, "measured, DeepSeek half only"),
+    "mixture": (52.79, "$52.34 imputed Opus + $0.45 measured DeepSeek"),
 }
 
 # Leaderboard field means, for the tasks harness-bench.ai publishes them for.
@@ -252,6 +256,8 @@ totals does not.</p>
 </div>
 
 <h2>Cost</h2>
+<p class="lede">Priced at API rates so the five columns compare. A subscription round bills per seat
+and journals &#36;0.00 &mdash; true, and useless beside a metered one.</p>
 <div class="tbl scroll">
 <table>
 <thead><tr><th>backend</th><th>how the figure was arrived at</th></tr></thead>
@@ -264,9 +270,17 @@ totals does not.</p>
   from journal tokens gives <strong>&#36;1.1882</strong>. The method is validated against Flash, where a
   measured figure exists: reconstruction returns <strong>&#36;0.6399</strong> against a measured
   <strong>&#36;0.6399</strong>, to four decimals.</p>
-  <p>The mixture's &#36;0.4545 is its DeepSeek half only. Its Opus and Sonnet calls are subscription-billed
-  and cost nothing per token, which also means the binding's money ceiling cannot see them &mdash; the
-  real bound on those links is a rate limit <code>L-9</code> has no view of.</p>
+  <p><strong>The mixture's measured &#36;0.4545 is 0.9% of what the round actually consumed.</strong> That
+  figure is its DeepSeek half; its 1,582 Opus calls carried 20.06M cache-read, 2.49M input and 1.19M
+  output tokens, which at &#36;0.50 / &#36;5.00 / &#36;25.00 per MTok is <strong>&#36;52.34</strong> &mdash;
+  99.1% of a <strong>&#36;52.79</strong> total. The Sonnet link never fired: it sat as a fallback in the
+  chat and gatefixer chains and no call reached it.</p>
+  <p><strong>The round was configured with a &#36;5.00 cycle ceiling and reported &#36;0.4545 against it,
+  both true.</strong> A ceiling that stops at &#36;5 while &#36;52 of equivalent resource goes out is not a
+  ceiling &mdash; <code>L-9</code> exists so an unattended run stops at a bound rather than finding it
+  afterwards, and against a subscription link there is no bound but a rate limit nothing in the loop can
+  read. Filed as <code>L-39</code>: a link should be able to declare a shadow price, journalled beside the
+  real charge and never confused with it.</p>
 </div>
 
 <h2>What these rounds found in the harness</h2>
