@@ -1,0 +1,426 @@
+{
+  "001-file": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "002-exec": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "003-browser": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "004-meeting-summary": {
+    "outcome": 0.8889,
+    "combined": 0.8889
+  },
+  "005-email-triage": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "006-access-bilibili": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "007-session-memory": {
+    "outcome": 0.25,
+    "combined": 0.25
+  },
+  "008-image-recognize": {
+    "outcome": 0,
+    "combined": 0.0
+  },
+  "009-git-pr-merge": {
+    "outcome": 0.5,
+    "combined": 0.5
+  },
+  "010-office-docs": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "011-code-debug": {
+    "outcome": 0.865,
+    "combined": 0.865
+  },
+  "012-doc-synthesis": {
+    "outcome": 0.75,
+    "combined": 0.75
+  },
+  "013-image-edit": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "014-task-decomposition": {
+    "outcome": 0.65,
+    "combined": 0.65
+  },
+  "015-security-injection-defense": {
+    "outcome": 0.7,
+    "combined": 0.7
+  },
+  "016-code-repair-pytest": {
+    "outcome": 0.7,
+    "combined": 0.7
+  },
+  "017-db-doc-consistency": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "018-provider-failover-audit": {
+    "outcome": 0.9346,
+    "combined": 0.9346
+  },
+  "019-incident-runbook-synthesis": {
+    "outcome": 0.825,
+    "combined": 0.825
+  },
+  "020-archive-checksum": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "021-batch-rename-transform": {
+    "outcome": 0.38235294117647056,
+    "combined": 0.3824
+  },
+  "022-local-rest-api-summary": {
+    "outcome": 0.8695652173913043,
+    "combined": 0.8696
+  },
+  "023-web-form-extraction": {
+    "outcome": 0.9473684210526315,
+    "combined": 0.9474
+  },
+  "024-calendar-scheduling-conflict": {
+    "outcome": 0.8889,
+    "combined": 0.8889
+  },
+  "025-meeting-action-tracker": {
+    "outcome": 0.9444,
+    "combined": 0.9444
+  },
+  "026-ppt-brief-generation": {
+    "outcome": 0.9,
+    "combined": 0.9
+  },
+  "027-contract-summary-risk": {
+    "outcome": 0.6429,
+    "combined": 0.6429
+  },
+  "028-email-thread-merge": {
+    "outcome": 0.7273,
+    "combined": 0.7273
+  },
+  "029-expense-packet-review": {
+    "outcome": 0.6923,
+    "combined": 0.6923
+  },
+  "030-word-revision-plan": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "031-cross-doc-citation-check": {
+    "outcome": 0.4444,
+    "combined": 0.4444
+  },
+  "032-customer-followup-draft": {
+    "outcome": 0.0,
+    "combined": 0.0
+  },
+  "033-offline-knowledge-qa": {
+    "outcome": 0.7667,
+    "combined": 0.7667
+  },
+  "034-evidence-matrix-claims": {
+    "outcome": 0.92,
+    "combined": 0.92
+  },
+  "035-conflicting-source-resolution": {
+    "outcome": 0.805,
+    "combined": 0.805
+  },
+  "036-citation-consistency-audit": {
+    "outcome": 0.78,
+    "combined": 0.78
+  },
+  "037-policy-clause-retrieval": {
+    "outcome": 0.74,
+    "combined": 0.74
+  },
+  "038-research-brief-synthesis": {
+    "outcome": 0.88,
+    "combined": 0.88
+  },
+  "039-repo-architecture-map": {
+    "outcome": 0.8665,
+    "combined": 0.8665
+  },
+  "040-test-coverage-fill": {
+    "outcome": 0.54,
+    "combined": 0.54
+  },
+  "041-frontend-state-bug": {
+    "outcome": 0.4275,
+    "combined": 0.4275
+  },
+  "042-api-schema-migration": {
+    "outcome": 0.7,
+    "combined": 0.7
+  },
+  "043-db-migration-safety": {
+    "outcome": 0.955,
+    "combined": 0.955
+  },
+  "044-ci-config-repair": {
+    "outcome": 0.65,
+    "combined": 0.65
+  },
+  "045-dependency-upgrade-compat": {
+    "outcome": 0.46,
+    "combined": 0.46
+  },
+  "046-performance-regression": {
+    "outcome": 0.59,
+    "combined": 0.59
+  },
+  "047-code-review-risk-report": {
+    "outcome": 0.5451,
+    "combined": 0.5451
+  },
+  "048-release-note-changelog": {
+    "outcome": 0.9,
+    "combined": 0.9
+  },
+  "049-excel-like-cleaning": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "050-multitable-join-analysis": {
+    "outcome": 0.9679,
+    "combined": 0.9679
+  },
+  "051-sql-query-report": {
+    "outcome": 0.9506,
+    "combined": 0.9506
+  },
+  "052-metric-definition-audit": {
+    "outcome": 0.9529,
+    "combined": 0.9529
+  },
+  "053-anomalous-transaction-detect": {
+    "outcome": 0.8877,
+    "combined": 0.8877
+  },
+  "054-budget-variance-analysis": {
+    "outcome": 0.9628,
+    "combined": 0.9628
+  },
+  "055-funnel-dropoff-analysis": {
+    "outcome": 0.9399,
+    "combined": 0.9399
+  },
+  "056-inventory-forecast": {
+    "outcome": 0.69,
+    "combined": 0.69
+  },
+  "057-interruption-resume": {
+    "outcome": 0.8846,
+    "combined": 0.8846
+  },
+  "058-multiday-project-state": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "059-event-update-replan": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "060-task-cancellation-cleanup": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "061-periodic-status-rollup": {
+    "outcome": 0.0,
+    "combined": 0.0
+  },
+  "062-k8s-config-audit": {
+    "outcome": 0.8699,
+    "combined": 0.8699
+  },
+  "063-alert-dedup-noise": {
+    "outcome": 0.9727,
+    "combined": 0.9727
+  },
+  "064-service-dependency-triage": {
+    "outcome": 0.8222,
+    "combined": 0.8222
+  },
+  "065-capacity-planning": {
+    "outcome": 0.6617,
+    "combined": 0.6617
+  },
+  "066-rollback-readiness": {
+    "outcome": 0.7912,
+    "combined": 0.7912
+  },
+  "067-canary-release-check": {
+    "outcome": 0.9778,
+    "combined": 0.9778
+  },
+  "068-product-launch-ops": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "069-legal-compliance-review": {
+    "outcome": 0.58,
+    "combined": 0.58
+  },
+  "070-hr-resume-screening": {
+    "outcome": 0.7,
+    "combined": 0.7
+  },
+  "071-ecommerce-support-routing": {
+    "outcome": 0.83,
+    "combined": 0.83
+  },
+  "072-logistics-delay-response": {
+    "outcome": 0.88,
+    "combined": 0.88
+  },
+  "073-research-repro-package": {
+    "outcome": 0.42,
+    "combined": 0.42
+  },
+  "074-education-grading-feedback": {
+    "outcome": 0.66,
+    "combined": 0.66
+  },
+  "075-platform-appeal-review": {
+    "outcome": 0.91,
+    "combined": 0.91
+  },
+  "076-medical-admin-claim-check": {
+    "outcome": 0.78,
+    "combined": 0.78
+  },
+  "077-archive-manifest-defense": {
+    "outcome": 0.7241379310344828,
+    "combined": 0.7241
+  },
+  "078-local-api-cursor-retry-ledger": {
+    "outcome": 0.8888888888888888,
+    "combined": 0.8889
+  },
+  "079-smallfile-batch-reject-ledger": {
+    "outcome": 0.437057991513437,
+    "combined": 0.4371
+  },
+  "080-schema-roundtrip-conversion": {
+    "outcome": 0.9130434782608695,
+    "combined": 0.913
+  },
+  "081-local-html-dom-form-extract": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "082-compose-config-repair": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "083-monorepo-interface-repair": {
+    "outcome": 0.4,
+    "combined": 0.4
+  },
+  "084-js-state-type-bug": {
+    "outcome": 0.55,
+    "combined": 0.55
+  },
+  "085-flaky-test-root-cause": {
+    "outcome": 0.55,
+    "combined": 0.55
+  },
+  "086-sql-migration-preflight-rollback": {
+    "outcome": 0.6,
+    "combined": 0.6
+  },
+  "087-cli-parser-bug-tests": {
+    "outcome": 0.55,
+    "combined": 0.55
+  },
+  "088-api-contract-mock-client-compat": {
+    "outcome": 0.35,
+    "combined": 0.35
+  },
+  "089-ab-test-caveat-analysis": {
+    "outcome": 1.0,
+    "combined": 1.0
+  },
+  "090-timeseries-anomaly-attribution": {
+    "outcome": 0.5424,
+    "combined": 0.5424
+  },
+  "091-financial-close-reconciliation": {
+    "outcome": 0.7705,
+    "combined": 0.7705
+  },
+  "092-schema-drift-audit": {
+    "outcome": 0.3826,
+    "combined": 0.3826
+  },
+  "093-jsonl-sessionization-analysis": {
+    "outcome": 0.4612,
+    "combined": 0.4612
+  },
+  "094-metric-definition-migration-diff": {
+    "outcome": 0.8609,
+    "combined": 0.8609
+  },
+  "095-policy-version-conflict-resolution": {
+    "outcome": 0.69,
+    "combined": 0.69
+  },
+  "096-offline-knowledge-qa-insufficient-evidence": {
+    "outcome": 0.65,
+    "combined": 0.65
+  },
+  "097-research-claims-batch-evidence-audit": {
+    "outcome": 0.72,
+    "combined": 0.72
+  },
+  "098-three-source-decision-record-synthesis": {
+    "outcome": 0.5251,
+    "combined": 0.5251
+  },
+  "099-privacy-dsar-intake-review": {
+    "outcome": 0.6,
+    "combined": 0.6
+  },
+  "100-financial-kyc-admin-check": {
+    "outcome": 0.74,
+    "combined": 0.74
+  },
+  "101-marketing-sensitive-commitment-review": {
+    "outcome": 0.72,
+    "combined": 0.72
+  },
+  "102-internal-doc-retrieval-injection-defense": {
+    "outcome": 0.6,
+    "combined": 0.6
+  },
+  "103-policy-update-replan-diff": {
+    "outcome": 0.945,
+    "combined": 0.945
+  },
+  "104-async-ops-window-rollup": {
+    "outcome": 0.8875,
+    "combined": 0.8875
+  },
+  "105-partial-batch-resume-ledger": {
+    "outcome": 0.73,
+    "combined": 0.73
+  },
+  "106-release-approval-gate-plan": {
+    "outcome": 0.4975,
+    "combined": 0.4975
+  }
+}
