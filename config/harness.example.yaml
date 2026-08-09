@@ -213,7 +213,7 @@
       "links": {
         "here": {
           "kind": "lmstudio",
-          "model": "qwen2.5-coder-32b",
+          "model": "liquid/lfm2.5-1.2b",
           "base_url": "http://localhost:1234",
           "concurrency": 1
         }
