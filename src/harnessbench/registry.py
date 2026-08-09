@@ -10,6 +10,7 @@ from harnessbench.adapters import (
     NanoBotAdapter,
     NanoClawAdapter,
     OpenClawAdapter,
+    PerpetumAdapter,
     PicoClawAdapter,
     ZeroClawAdapter,
     HermesAgentAdapter,
@@ -30,6 +31,8 @@ def build_adapter(adapter_name: str) -> BaseAdapter:
         return NullClawAdapter()
     if adapter_name == "openclaw":
         return OpenClawAdapter()
+    if adapter_name == "perpetum":
+        return PerpetumAdapter()
     if adapter_name == "moltis":
         return MoltisAdapter()
     if adapter_name == "fairyclaw":

@@ -131,6 +131,13 @@ def _extract_payload(decoded_text: str, response_headers: list[tuple[str, str]])
     return last_obj, parse_error
 
 
+def _is_event_stream(response_headers: list[tuple[str, str]]) -> bool:
+    return any(
+        key.lower() == "content-type" and "text/event-stream" in value.lower()
+        for key, value in response_headers
+    )
+
+
 def _lookup_route(routes_file: Path, path: str) -> tuple[str, dict[str, Any], str] | None:
     routes = _read_json(routes_file)
     best_prefix = ""
@@ -177,6 +184,40 @@ class _UsageProxyHandler(BaseHTTPRequestHandler):
             # disconnect instead of printing a full server traceback.
             return
 
+    def _relay(self, status: int, response_headers: list[tuple[str, str]], resp: Any) -> bytes:
+        """Pass a server-sent-event stream through as it arrives, and keep a copy.
+
+        Buffering a stream costs nothing for a harness that only reads the final
+        message, and everything for one that holds a deadline on the *first*
+        token — through a buffering proxy the first token arrives when the last
+        one does, and a link that answered normally is failed over. Only routes
+        that ask for this get it, so no other harness's timing changes.
+
+        The response goes out without a Content-Length and the connection is
+        closed at the end, which is how HTTP/1.0 delimits a body of unknown
+        length. Returns the bytes relayed, for the usual accounting.
+        """
+        self.send_response(status)
+        for key, value in response_headers:
+            if key.lower() in {"content-length", "transfer-encoding", "connection", "content-encoding"}:
+                continue
+            self.send_header(key, value)
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+        chunks: list[bytes] = []
+        while True:
+            # `read1`, not `read`: it returns what has arrived rather than
+            # waiting for the buffer to fill, which is the whole point.
+            chunk = resp.read1(8192) if hasattr(resp, "read1") else resp.read(8192)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            self.wfile.write(chunk)
+            self.wfile.flush()
+        self.close_connection = True
+        return b"".join(chunks)
+
     def _forward(self) -> None:
         route = _lookup_route(self.server.config.routes_file, urlsplit(self.path).path)
         if route is None:
@@ -209,11 +250,16 @@ class _UsageProxyHandler(BaseHTTPRequestHandler):
         response_body = b""
         status = 500
         response_headers: list[tuple[str, str]] = []
+        relayed = False
         try:
             with urlopen(req, timeout=1200) as resp:
                 status = resp.status
-                response_body = resp.read()
                 response_headers = list(resp.headers.items())
+                if route_meta.get("stream") and _is_event_stream(response_headers):
+                    response_body = self._relay(status, response_headers, resp)
+                    relayed = True
+                else:
+                    response_body = resp.read()
         except HTTPError as exc:
             status = exc.code
             response_body = exc.read()
@@ -221,19 +267,22 @@ class _UsageProxyHandler(BaseHTTPRequestHandler):
         except URLError as exc:
             self.send_error(502, f"proxy upstream error: {exc.reason}")
             return
-
-        try:
-            self.send_response(status)
-            for key, value in response_headers:
-                lower = key.lower()
-                if lower in {"content-length", "transfer-encoding", "connection", "content-encoding"}:
-                    continue
-                self.send_header(key, value)
-            self.send_header("Content-Length", str(len(response_body)))
-            self.end_headers()
-            self.wfile.write(response_body)
         except (BrokenPipeError, ConnectionResetError):
             return
+
+        if not relayed:
+            try:
+                self.send_response(status)
+                for key, value in response_headers:
+                    lower = key.lower()
+                    if lower in {"content-length", "transfer-encoding", "connection", "content-encoding"}:
+                        continue
+                    self.send_header(key, value)
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         log_entry = {
             "task_id": self.server.config.task_id,

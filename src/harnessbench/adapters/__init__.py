@@ -8,6 +8,7 @@ from harnessbench.adapters.nanobot import NanoBotAdapter
 from harnessbench.adapters.nanoclaw import NanoClawAdapter
 from harnessbench.adapters.nullclaw import NullClawAdapter
 from harnessbench.adapters.openclaw import OpenClawAdapter
+from harnessbench.adapters.perpetum import PerpetumAdapter
 from harnessbench.adapters.picoclaw import PicoClawAdapter
 from harnessbench.adapters.zeroclaw import ZeroClawAdapter
 from harnessbench.adapters.hermes import HermesAgentAdapter
@@ -21,6 +22,7 @@ __all__ = [
     "NanoClawAdapter",
     "NullClawAdapter",
     "OpenClawAdapter",
+    "PerpetumAdapter",
     "PicoClawAdapter",
     "ZeroClawAdapter",
     "HermesAgentAdapter",

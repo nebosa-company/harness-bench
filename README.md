@@ -27,7 +27,7 @@
 
 | 维度 | 说明 |
 |------|------|
-| **适配器** | `src/harnessbench/adapters/` — `openclaw` · `picoclaw` · `nanobot` · `fairyclaw` · `demo` |
+| **适配器** | `src/harnessbench/adapters/` — `openclaw` · `picoclaw` · `nanobot` · `fairyclaw` · `perpetum` · `demo` |
 | **过程分** | `tool_use_appropriate` · `consistency` · `robustness` + `security_gate` → `process_effective` |
 | **结果分** | 默认仅用 oracle `outcome_score`；**008-image-recognize** / **013-image-edit** 可与 `quality` 按 **`w≈0.9`** 融合 |
 | **任务定义** | `tasks/<task_id>/` — `task.yaml` · `prompt.txt` · `fixtures/` · `oracle_grade.py` |
@@ -148,6 +148,7 @@ PYTHONPATH=src python3 -m harnessbench.cli run-suite \
 OpenClaw 标准源配置在 `config/openclaw.json`。
 PicoClaw 标准源配置在 `config/picoclaw.json`。
 FairyClaw：将 `adapter` 设为 `fairyclaw`，`user_config` 指向 FairyClaw 的 **`config` 目录**（内含 `llm_endpoints.yaml` 等）。适配器在沙箱内合并完 usage-proxy 的 `llm_endpoints` 后，在子进程执行 **`fairyclaw agent ...`**（单进程、无需另起 `fairyclaw start`）。`bench_idle_seconds` / `bench_min_wait_after_send` 等可写在 harness 配置中（见 `config/harness.example.yaml` 的 `fairyclaw-local`）。
+Perpetum（`perp`）：将 `adapter` 设为 `perpetum`。它是**循环型 harness**，不接受裸 prompt——适配器为每道题 `perp init` 绑定一个工作区、在需求源里登记一个 id，再执行 `perp run --requirement`。链路与角色写在 harness 配置的 `links` / `roles`（或用 `user_config` 指向自备的 `links.md`）。**详见 [`docs/perpetum.md`](docs/perpetum.md)**。
 
 
 应用路径等在 `config/app.yaml`（`results_dir`、`work_root` 等按你的部署调整；示例可为 `data_/results` 与 `data_/sandbox`）。
