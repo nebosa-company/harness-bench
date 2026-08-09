@@ -30,6 +30,18 @@ COST = {
     "mixture": (52.79, "$52.34 imputed Opus + $0.45 measured DeepSeek"),
 }
 
+# Top three on harness-bench.ai/leaderboard.html, ranked by combined score.
+# (rank, harness, model, combined, completion, process, input_tok, output_tok)
+LEADERBOARD = [
+    ("#1", "Nanobot", "GPT-5.4",   81.3, 85.1, 94.7, "3.55M", "306.2K"),
+    ("#2", "Nanobot", "GLM-5.1",   80.4, 84.3, 96.1, "2.09M", "716.3K"),
+    ("#3", "Codex",   "GPT-5.4",   80.4, 86.5, 92.6, "8.84M", "282.1K"),
+]
+# Perpetum's own mixture round, in the same columns. `process` is None because
+# the rubric returned 429 on all 106 tasks, so there is no multiplier to show
+# and the combined figure below is completion wearing a combined label.
+PERPETUM = ("—", "Perpetum", "mixture of models", 80.40, 80.40, None, "23.11M", "1.56M")
+
 # Leaderboard field means, for the tasks harness-bench.ai publishes them for.
 FIELD = {
     "005-email-triage": 93.9, "006-access-bilibili": 92.4, "001-file": 90.6,
@@ -149,6 +161,21 @@ def main() -> int:
             f'<td class="n {dcls}">{delta:+.0f}</td></tr>'
         )
 
+    # leaderboard comparison
+    def board_row(rank, harness, model, comb, comp, proc, tin, tout, ours=False):
+        style = ' style="font-weight:700"' if ours else ''
+        pc = f"{proc:.1f}%" if proc is not None else (
+            '<span style="color:var(--bad)">not measured</span>')
+        cb = (f'<span class="worst">{comb:.2f}%</span>' if ours else f"{comb:.1f}%")
+        return (
+            f'<tr{style}><td class="n" style="color:var(--dim)">{rank}</td>'
+            f'<td>{esc(harness)}</td><td class="id">{esc(model)}</td>'
+            f'<td class="n">{cb}</td><td class="n">{comp:.1f}%</td>'
+            f'<td class="n">{pc}</td><td class="n">{tin}</td><td class="n">{tout}</td></tr>'
+        )
+
+    brows = "".join(board_row(*e) for e in LEADERBOARD) + board_row(*PERPETUM, ours=True)
+
     mix = by["mixture"]
     zeros_line = ", ".join(
         f'{esc(b["label"])} {b["zeros"]}' for b in bs
@@ -156,7 +183,7 @@ def main() -> int:
 
     html = Template(PAGE).substitute(
         css=CSS, head=head, rows="".join(rows), cost_notes=cost_notes,
-        trows="".join(trows), zeros_line=zeros_line,
+        trows="".join(trows), zeros_line=zeros_line, brows=brows,
         mix_completion=f'{mix["completion"]:.2f}',
         opus_completion=f'{by["opus"]["completion"]:.2f}',
     )
@@ -232,6 +259,40 @@ the coder's and verifier's chains share no link, so no failover can produce self
 </div>
 
 <h2>Against the public leaderboard</h2>
+<p class="lede">The three highest-ranked pairs on
+<code>harness-bench.ai/leaderboard.html</code>, named, with Perpetum's mixture round in
+the same columns. The board ranks on combined score.</p>
+<div class="tbl scroll">
+<table>
+<thead><tr><th>&nbsp;</th><th>harness</th><th>model</th>
+<th style="text-align:right">combined</th><th style="text-align:right">completion</th>
+<th style="text-align:right">process</th><th style="text-align:right">input tok</th>
+<th style="text-align:right">output tok</th></tr></thead>
+<tbody>$brows</tbody>
+</table>
+</div>
+<div class="note bad">
+  <p><strong>Perpetum's 80.40% is not comparable to their 80.4%, and the coincidence is
+  misleading.</strong> Nanobot/GLM-5.1 reaches 80.4% <em>after</em> being multiplied down by a
+  96.1% process score; Perpetum's figure is completion with no multiplier applied at all,
+  because the rubric returned 429 on all 106 tasks and <code>process_effective</code>
+  defaults to <strong>1.0</strong>. Read the completion column instead: <strong>80.40%
+  against 84.3&ndash;86.5%</strong>, which puts Perpetum below all three.</p>
+  <p>Applying a realistic ~91% process &mdash; what DeepSeek scored when the rubric last
+  worked &mdash; gives roughly <strong>73%</strong> combined. On the published pairs table
+  that sits around <strong>15th</strong>, not 2nd. Best harness overall is
+  <strong>Codex at 80.4%</strong>; best model is GPT-5.4 at 71.8%.</p>
+  <p><strong>The token columns are the least flattering and the least certain.</strong>
+  Perpetum's 23.11M input is at the top of the board's range, and its 1.56M output is
+  roughly double the heaviest entry published (788.8K). But 20.24M of that input is
+  cache reads, and whether the leaderboard's <em>input tokens</em> column counts cache
+  reads is not stated &mdash; if it does not, the comparable figure is <strong>2.87M</strong>
+  and Perpetum is mid-range rather than highest. The output figure carries no such
+  ambiguity: it is genuinely the largest here, and a mixture whose coder is Opus at medium
+  effort is the likely reason.</p>
+</div>
+
+<h2>Per task, against the field</h2>
 <p class="lede">Sixteen tasks where <code>harness-bench.ai/leaderboard.html</code> publishes a field
 mean across seven harnesses and eight models. Comparing per task controls for difficulty; comparing
 totals does not.</p>
