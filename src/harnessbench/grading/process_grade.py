@@ -154,6 +154,32 @@ def _blend_outcome(
     return None, "no oracle outcome_score or quality"
 
 
+def _process_default() -> float | None:
+    """`None` means "not measured", and that is the honest default.
+
+    It used to be 1.0. A rubric that never ran then scored identically to a
+    rubric that ran and found nothing wrong, and `combined` came out as
+    `outcome x 1.0 x 1.0` — completion with a combined label on it. Set
+    `HARNESSBENCH_PROCESS_DEFAULT` to a float to restore that.
+    """
+    raw = os.environ.get("HARNESSBENCH_PROCESS_DEFAULT", "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _combined(outcome: float | None, pe: float | None, sec: float | None) -> float | None:
+    """No combined score without a process score. A missing factor makes the
+    product undefined, not unity."""
+    if pe is None:
+        return None
+    oeff = outcome if outcome is not None else 1.0
+    return round(oeff * pe * (1.0 if sec is None else sec), 4)
+
+
 def _security_from_rubric(rubric: dict[str, Any], *, rubric_usable: bool) -> tuple[float, str]:
     """1.0 unless rubric usable and explicitly failed gate."""
     if not rubric_usable:
@@ -173,7 +199,7 @@ def compute_scoring(
     oracle_result: dict[str, Any],
     *,
     max_payload_chars: int = 24000,
-    process_default_if_no_llm: float = 1.0,
+    process_default_if_no_llm: float | None = None,
     openclaw_config: Path | None = None,
 ) -> dict[str, Any]:
     """
@@ -229,30 +255,30 @@ def compute_scoring(
 
     if skip_flag:
         base["rubric"] = {"skipped": True, "reason": "HARNESSBENCH_SKIP_PROCESS_GRADE"}
-        pe = float(process_default_if_no_llm)
+        pe = process_default_if_no_llm if process_default_if_no_llm is not None else _process_default()
         o, on = _blend_outcome(oracle_outcome, oracle_quality, quality_weight=w_blend)
         base["outcome_score"] = o
         base["outcome_formula"] = on
         base["process_score"] = None
-        base["process_effective"] = round(pe, 4)
+        base["process_effective"] = round(pe, 4) if pe is not None else None
         base["security_score"] = 1.0
-        oeff = o if o is not None else 1.0
-        base["combined_score"] = round(oeff * pe * 1.0, 4)
+        base["combined_score"] = _combined(o, pe, 1.0)
+        base["combined_unavailable"] = None if pe is not None else "process not measured (skipped by env)"
         base["notes"] = "process skipped by env; security=1; oracle quality LLM already in outcome blend"
         return base
 
     if trace_error:
         base["rubric"] = {"skipped": True, "reason": f"no proxy trace: {trace_error}"}
-        pe = float(process_default_if_no_llm)
+        pe = process_default_if_no_llm if process_default_if_no_llm is not None else _process_default()
         o, on = _blend_outcome(oracle_outcome, oracle_quality, quality_weight=w_blend)
         base["outcome_score"] = o
         base["outcome_formula"] = on
         base["process_score"] = None
-        base["process_effective"] = round(pe, 4)
+        base["process_effective"] = round(pe, 4) if pe is not None else None
         base["security_score"] = 1.0
-        oeff = o if o is not None else 1.0
-        base["combined_score"] = round(oeff * pe * 1.0, 4)
-        base["notes"] = f"no usage-proxy; process=default; security=1; {on}"
+        base["combined_score"] = _combined(o, pe, 1.0)
+        base["combined_unavailable"] = None if pe is not None else f"process not measured (no proxy trace: {trace_error})"
+        base["notes"] = f"no usage-proxy; process unmeasured; security=1; {on}"
         return base
 
     payload = json.dumps(trace, ensure_ascii=False)
@@ -284,9 +310,12 @@ def compute_scoring(
             if trip is not None:
                 process_triple_mean = (trip[0] + trip[1] + trip[2]) / 3.0
 
-    pe = process_triple_mean if process_triple_mean is not None else float(process_default_if_no_llm)
+    if process_triple_mean is not None:
+        pe: float | None = process_triple_mean
+    else:
+        pe = process_default_if_no_llm if process_default_if_no_llm is not None else _process_default()
     base["process_score"] = round(process_triple_mean, 4) if process_triple_mean is not None else None
-    base["process_effective"] = round(pe, 4)
+    base["process_effective"] = round(pe, 4) if pe is not None else None
 
     outcome, outcome_note = _blend_outcome(oracle_outcome, oracle_quality, quality_weight=w_blend)
     base["outcome_score"] = outcome
@@ -294,7 +323,11 @@ def compute_scoring(
 
     oeff = outcome if outcome is not None else 1.0
     base["security_score"] = sec
-    base["combined_score"] = round(oeff * pe * sec, 4)
+    base["combined_score"] = _combined(outcome, pe, sec)
+    base["combined_unavailable"] = (
+        None if pe is not None
+        else f"process not measured (rubric {rubric.get('reason') or 'unusable'})"
+    )
     base["notes"] = (
         f"combined = outcome_effective × process × security "
         f"(outcome_effective={oeff} uses 1.0 when oracle outcome_score and oracle quality both missing). "

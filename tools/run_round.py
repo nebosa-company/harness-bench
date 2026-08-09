@@ -87,6 +87,27 @@ def main() -> int:
               f"cannot open a tunnel)", flush=True)
     else:
         env.setdefault("HARNESSBENCH_PUBLIC_URL_TEMPLATE", "{local_url}")
+    # The process rubric defaulted to OpenAI, and that account's credits ran
+    # out: every task in five consecutive rounds came back `HTTP 429
+    # insufficient_quota / credit_balance_exhausted`. It reads as throttling and
+    # is not — no backoff would have helped, which is why it was 106/106 rather
+    # than intermittent. DeepSeek speaks the same Chat Completions shape and is
+    # already paid for, so the grader has a working backend by default.
+    #
+    # Setting it here rather than in a shell is the same reasoning as the
+    # public-URL template above: a round that silently grades nothing is worse
+    # than one that fails loudly, and neither should depend on remembering.
+    if not env.get("RUBRIC_API_KEY") and env.get("DEEPSEEK_API_KEY"):
+        env["RUBRIC_API_KEY"] = env["DEEPSEEK_API_KEY"]
+        env.setdefault("RUBRIC_BASE_URL", "https://api.deepseek.com/v1")
+        env.setdefault("RUBRIC_MODEL", "deepseek-chat")
+        print(f"[run_round] rubric backend: {env['RUBRIC_MODEL']} "
+              f"@ {env['RUBRIC_BASE_URL']}", flush=True)
+    elif not env.get("RUBRIC_API_KEY"):
+        print("[run_round] WARNING: no RUBRIC_API_KEY and no DEEPSEEK_API_KEY — "
+              "process will be unmeasured and combined_score will be null",
+              flush=True)
+
     env["PYTHONPATH"] = str(ROOT / "src")
     env["PYTHONIOENCODING"] = "utf-8"
 
