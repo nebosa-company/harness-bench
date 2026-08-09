@@ -178,7 +178,7 @@
       "session_prefix": "harnessbench-perp-opus",
       "timeout_sec": 2400,
       "links": {
-        "claude": { "kind": "claude-cli", "model": "opus" }
+        "claude": { "kind": "claude-cli", "model": "opus", "effort": "medium" }
       },
       "roles": { "coder": "claude", "chat": "claude", "verifier": "claude" },
       "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
@@ -194,7 +194,7 @@
       "session_prefix": "harnessbench-perp-sonnet",
       "timeout_sec": 2400,
       "links": {
-        "claude": { "kind": "claude-cli", "model": "sonnet" }
+        "claude": { "kind": "claude-cli", "model": "sonnet", "effort": "medium" }
       },
       "roles": { "coder": "claude", "chat": "claude", "verifier": "claude" },
       "budget": { "cycle_money": 5.00, "batch_money": 5.00 },

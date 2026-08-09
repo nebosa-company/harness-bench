@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from harnessbench.adapters.base import BaseAdapter
 from harnessbench.models import AdapterRunContext, AdapterRunResult
@@ -140,7 +141,13 @@ def _links_block(
     return text
 
 
-def _patch_binding(path: Path, gate: str, budget: dict[str, Any], map_budget: Any) -> None:
+def _patch_binding(
+    path: Path,
+    gate: str,
+    budget: dict[str, Any],
+    map_budget: Any,
+    egress_allow: list[str] | None = None,
+) -> None:
     """Turn the scaffold `perp init` writes into one that will actually run.
 
     `perp init` leaves `gate.test` commented out on purpose — the harness
@@ -148,6 +155,14 @@ def _patch_binding(path: Path, gate: str, budget: dict[str, Any], map_budget: An
     is graded by the oracle rather than by a gate, so the gate here is a real
     command that is trivially green: it satisfies the binding without adding a
     second, competing definition of done.
+
+    `egress_allow` names the hosts `fetch` may reach (Perpetum's `S-4`). Five
+    tasks stand up a mock server on loopback and ask the model to read it, and
+    that server is the only thing this harness has any business fetching — so
+    the list is exactly the task's own mock host, never a wildcard. Perpetum
+    reads it via `S-23`; against a binding that says nothing, every fetch is
+    refused as "the allowlist is empty", which is the correct default and was
+    the behaviour for every earlier round.
     """
     text = path.read_text(encoding="utf-8")
     text = text.replace("# gate.test  = <your test command>", f"gate.test = {gate}")
@@ -166,7 +181,30 @@ def _patch_binding(path: Path, gate: str, budget: dict[str, Any], map_budget: An
     if map_budget is not None:
         text = text.replace("```perp-binding\n", f"```perp-binding\nmap.budget = {map_budget}\n", 1)
 
+    if egress_allow:
+        allow = ", ".join(sorted(set(egress_allow)))
+        text = text.replace("```perp-binding\n", f"```perp-binding\negress.allow = {allow}\n", 1)
+
     path.write_text(text, encoding="utf-8")
+
+
+def _mock_hosts(env: dict[str, str]) -> list[str]:
+    """The hosts of whatever mock servers this task's hooks stood up.
+
+    Read from the runtime env the task's own `prepare_runtime` produced —
+    `MOCK_PAGE`, `MOCK_API_BASE`, `MOCK_SITE_BASE` — so the allowlist is
+    derived from what actually exists for this run rather than guessed from a
+    task id. A task with no mock server contributes nothing and its binding
+    stays silent, which keeps `fetch` refused everywhere it was refused before.
+    """
+    hosts: list[str] = []
+    for key, value in env.items():
+        if not key.startswith("MOCK_") or not isinstance(value, str):
+            continue
+        host = urlparse(value if "://" in value else f"http://{value}").hostname
+        if host:
+            hosts.append(host.lower())
+    return hosts
 
 
 def _mint_requirement(path: Path, title: str) -> str:
@@ -482,7 +520,13 @@ class PerpetumAdapter(BaseAdapter):
         # budget the bench gave it.
         budget.setdefault("cycle_seconds", ctx.timeout_sec)
         budget.setdefault("batch_seconds", ctx.timeout_sec)
-        _patch_binding(harness / "binding.md", gate, budget, ctx.model_config.get("map_budget"))
+        _patch_binding(
+            harness / "binding.md",
+            gate,
+            budget,
+            ctx.model_config.get("map_budget"),
+            _mock_hosts(dict(ctx.env or {})),
+        )
 
         user_config = ctx.model_config.get("user_config")
         if user_config:

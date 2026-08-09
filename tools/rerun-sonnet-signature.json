@@ -1,0 +1,156 @@
+[
+  {
+    "task_id": "008-image-recognize",
+    "ok": true,
+    "elapsed_sec": 50.8,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-008-image-recognize-sonnet-20260809-000950-2c1702ad",
+    "combined_score": 0,
+    "turns": 4,
+    "calls": 2,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "010-office-docs",
+    "ok": true,
+    "elapsed_sec": 180.2,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-010-office-docs-sonnet-20260809-001041-bcc541cb",
+    "combined_score": 1.0,
+    "turns": 20,
+    "calls": 19,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "011-code-debug",
+    "ok": true,
+    "elapsed_sec": 300.4,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-011-code-debug-sonnet-20260809-001341-9818f90f",
+    "combined_score": 0.8575,
+    "turns": 5,
+    "calls": 4,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "018-provider-failover-audit",
+    "ok": true,
+    "elapsed_sec": 215.0,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-018-provider-failover-audit-sonnet-20260809-001842-25a3a5f9",
+    "combined_score": 0.9162,
+    "turns": 10,
+    "calls": 15,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "021-batch-rename-transform",
+    "ok": true,
+    "elapsed_sec": 183.2,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-021-batch-rename-transform-sonnet-20260809-002217-9c282ee5",
+    "combined_score": 0.5294117647058824,
+    "turns": 15,
+    "calls": 14,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "022-local-rest-api-summary",
+    "ok": true,
+    "elapsed_sec": 239.9,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-022-local-rest-api-summary-sonnet-20260809-002520-b900584e",
+    "combined_score": 0.8695652173913043,
+    "turns": 26,
+    "calls": 25,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "033-offline-knowledge-qa",
+    "ok": true,
+    "elapsed_sec": 58.8,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-033-offline-knowledge-qa-sonnet-20260809-002920-6ca9ec15",
+    "combined_score": 0.7667,
+    "turns": 7,
+    "calls": 6,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "035-conflicting-source-resolution",
+    "ok": true,
+    "elapsed_sec": 189.1,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-035-conflicting-source-resolution-sonnet-20260809-003019-52b8f9d3",
+    "combined_score": 0.84,
+    "turns": 14,
+    "calls": 13,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "038-research-brief-synthesis",
+    "ok": true,
+    "elapsed_sec": 72.0,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-038-research-brief-synthesis-sonnet-20260809-003328-b35c5c5e",
+    "combined_score": 0.0,
+    "turns": 5,
+    "calls": 5,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "096-offline-knowledge-qa-insufficient-evidence",
+    "ok": true,
+    "elapsed_sec": 155.5,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-096-offline-knowledge-qa-insufficient-evidence-sonnet-20260809-003516-8e29c0bc",
+    "combined_score": 0.65,
+    "turns": 11,
+    "calls": 10,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "003-browser",
+    "ok": true,
+    "elapsed_sec": 40.3,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-003-browser-sonnet-20260809-021023-265af03d",
+    "combined_score": 1.0,
+    "turns": 5,
+    "calls": 4,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "006-access-bilibili",
+    "ok": true,
+    "elapsed_sec": 33.1,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-006-access-bilibili-sonnet-20260809-021103-12a285cb",
+    "combined_score": 1.0,
+    "turns": 4,
+    "calls": 3,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "078-local-api-cursor-retry-ledger",
+    "ok": true,
+    "elapsed_sec": 63.7,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-078-local-api-cursor-retry-ledger-sonnet-20260809-021136-1c46d6d2",
+    "combined_score": 0.037037037037037035,
+    "turns": 6,
+    "calls": 6,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  },
+  {
+    "task_id": "047-code-review-risk-report",
+    "ok": true,
+    "elapsed_sec": 117.6,
+    "sandbox": "D:\\harness-bench-work\\sandbox\\perpetum-sonnet\\sonnet\\oc-bench-v2-047-code-review-risk-report-sonnet-20260809-021740-7497aba7",
+    "combined_score": 0.6367,
+    "turns": 10,
+    "calls": 9,
+    "still_signature": false,
+    "injection_claim_in_journal": false
+  }
+]
