@@ -40,7 +40,7 @@ LEADERBOARD = [
 # Perpetum's own mixture round, in the same columns. `process` is None because
 # the rubric returned 429 on all 106 tasks, so there is no multiplier to show
 # and the combined figure below is completion wearing a combined label.
-PERPETUM = ("—", "Perpetum", "mixture of models", 80.40, 80.40, None, "23.11M", "1.56M")
+PERPETUM = ("—", "Perpetum", "mixture of models", 80.40, 80.40, None, "2.87M", "1.56M")
 
 # Leaderboard field means, for the tasks harness-bench.ai publishes them for.
 FIELD = {
@@ -266,7 +266,7 @@ the same columns. The board ranks on combined score.</p>
 <table>
 <thead><tr><th>&nbsp;</th><th>harness</th><th>model</th>
 <th style="text-align:right">combined</th><th style="text-align:right">completion</th>
-<th style="text-align:right">process</th><th style="text-align:right">input tok</th>
+<th style="text-align:right">process</th><th style="text-align:right">input tok<br><span style="font-weight:400;text-transform:none">(excl. cache)</span></th>
 <th style="text-align:right">output tok</th></tr></thead>
 <tbody>$brows</tbody>
 </table>
@@ -282,14 +282,21 @@ the same columns. The board ranks on combined score.</p>
   worked &mdash; gives roughly <strong>73%</strong> combined. On the published pairs table
   that sits around <strong>15th</strong>, not 2nd. Best harness overall is
   <strong>Codex at 80.4%</strong>; best model is GPT-5.4 at 71.8%.</p>
-  <p><strong>The token columns are the least flattering and the least certain.</strong>
-  Perpetum's 23.11M input is at the top of the board's range, and its 1.56M output is
-  roughly double the heaviest entry published (788.8K). But 20.24M of that input is
-  cache reads, and whether the leaderboard's <em>input tokens</em> column counts cache
-  reads is not stated &mdash; if it does not, the comparable figure is <strong>2.87M</strong>
-  and Perpetum is mid-range rather than highest. The output figure carries no such
-  ambiguity: it is genuinely the largest here, and a mixture whose coder is Opus at medium
-  effort is the likely reason.</p>
+  <p><strong>The token columns say opposite things, and the input one is the better
+  news.</strong> Perpetum's input is shown <em>excluding cache reads</em>:
+  <strong>2.87M</strong>, or 27K per task &mdash; between Nanobot/GLM-5.1's 2.09M and
+  Nanobot/GPT-5.4's 3.55M, and a third of Codex's 8.84M. On fresh prompt tokens the
+  mixture is efficient rather than heavy. A separate <strong>20.24M</strong> was served
+  from cache, which is <strong>88% of all prompt tokens</strong> &mdash; a high hit rate,
+  and the reason the round cost &#36;52.79 instead of several times that.</p>
+  <p>The figure is shown without cache because that is the like-for-like reading, but the
+  leaderboard does not state whether its own input column counts cache reads. If it does,
+  the comparable Perpetum number is 23.11M and it is top-of-range instead. The honest
+  position is that one of those two comparisons is right and the page cannot tell which.</p>
+  <p><strong>Output carries no such ambiguity, and it is the unflattering half.</strong>
+  1.56M is roughly double the heaviest entry published (788.8K) and five times the top
+  three's 282&ndash;716K. A mixture whose coder is Opus is the likely reason, and output is
+  the expensive direction &mdash; &#36;25 per MTok against &#36;5 in.</p>
 </div>
 
 <h2>Per task, against the field</h2>
