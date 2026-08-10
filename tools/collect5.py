@@ -32,6 +32,8 @@ BACKENDS = [
      "one link in every role"),
     ("mixture", "perpetum-mixture", "mixture of models",
      "opus codes, ds-pro verifies, ds-fast the rest"),
+    ("claude", "perpetum-claude", "pure Claude",
+     "opus codes, sonnet verifies — the control"),
 ]
 
 

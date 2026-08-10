@@ -28,6 +28,7 @@ COST = {
     "flash": (0.6399, "measured"),
     "pro": (1.1882, "reconstructed — the round predates its prices"),
     "mixture": (52.79, "$52.34 imputed Opus + $0.45 measured DeepSeek"),
+    "claude": (60.57, "imputed — subscription, priced at API rates"),
 }
 
 # Top three on harness-bench.ai/leaderboard.html, ranked by combined score.
@@ -103,7 +104,7 @@ def esc(s):
 def main() -> int:
     bs = DATA["backends"]
     by = {b["key"]: b for b in bs}
-    order = ["mixture", "opus", "flash", "pro", "sonnet"]
+    order = ["mixture", "claude", "opus", "flash", "pro", "sonnet"]
     bs = [by[k] for k in order]
 
     # headline table
