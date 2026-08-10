@@ -1,0 +1,68 @@
+{
+  "_": [
+    "The suite that decides whether a mutation ships (`X-18`, and the canary in",
+    "part 5 of post-claude-self-mutation.md).",
+    "",
+    "Twenty tasks, not a hundred and six. A full round is seven hours and $50;",
+    "a gate that expensive is a gate that gets skipped, and a skipped gate is",
+    "worse than none because the loop still claims to have one.",
+    "",
+    "Chosen by failure class rather than by score. A suite of the tasks a",
+    "harness already fails measures despair; a suite of the ones it already",
+    "passes measures nothing. These are the classes where this session's",
+    "measurements found real defects, plus a few that have never moved, which",
+    "are the control: a change that breaks one of those broke something",
+    "unrelated to what it was aiming at.",
+    "",
+    "BEFORE THIS GATES ANYTHING, RUN IT A/A — the same binary, twice. 53 of 106",
+    "tasks moved between two runs of identical code, so the difference between",
+    "two runs of *different* code means nothing until the difference between two",
+    "runs of the same code is known. The A/A spread is the noise band, and it",
+    "goes in `noise_band` below, replacing the null that is there now.",
+    "",
+    "A candidate promotes only when it clears the band. Until `noise_band` is a",
+    "number, this suite reports and decides nothing."
+  ],
+
+  "noise_band": null,
+  "noise_band_measured_at": null,
+  "runs_for_noise_band": 2,
+
+  "classes": {
+    "binding": {
+      "why": "T-38, T-39 and M-43 all landed here — 119 missing-argument and 50 unknown-tool refusals across one round. If the alias work regressed, it shows here first.",
+      "tasks": ["001-file", "002-exec", "016-code-repair-pytest", "042-api-schema-migration"]
+    },
+    "step-failure": {
+      "why": "The eight `perp: 1 steps failed` of the last round, which T-37 is meant to have fixed. Unverified until one of these rounds is clean.",
+      "tasks": ["012-doc-synthesis", "030-word-revision-plan", "036-citation-consistency-audit", "065-capacity-planning"]
+    },
+    "fabrication": {
+      "why": "045 scored 0.08 with the rubric note `fabricated file contents`. The scariest class for an unattended product and the one a grounding gate would target.",
+      "tasks": ["045-dependency-upgrade-compat", "031-cross-doc-citation-check"]
+    },
+    "session-memory": {
+      "why": "007 loses its round-two state. A product running long unattended sessions is this task, repeated for a week.",
+      "tasks": ["007-session-memory"]
+    },
+    "environment": {
+      "why": "023 never located MOCK_FORM_URL — the harness knows things it does not tell the model. Same shape as M-43 one level up.",
+      "tasks": ["023-web-form-extraction", "003-browser"]
+    },
+    "vision": {
+      "why": "013 sits at 0.40 and is the only exercise of the image path (M-38).",
+      "tasks": ["013-image-edit", "008-image-recognize"]
+    },
+    "control": {
+      "why": "Tasks that have never moved across six rounds. Not here to improve — here so that a change that breaks one is caught. A candidate that gains two points in the classes above and loses one here has not gained anything.",
+      "tasks": ["004-meeting-summary", "005-email-triage", "010-office-docs", "011-code-debug", "040-test-coverage-fill"]
+    }
+  },
+
+  "rules": [
+    "Tag before every cycle. Rollback is the previous tag, never an apology.",
+    "Never run against a binary a live session is pinned to — L-40's fingerprint is what makes that checkable.",
+    "A candidate that improves the mean but breaks a control task is not promoted.",
+    "Report what was dropped. A suite that silently truncates reads as full coverage."
+  ]
+}

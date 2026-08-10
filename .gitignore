@@ -1,6 +1,10 @@
 config/*
 !config/app.yaml
 !config/harness.example.yaml
+# The canary suite is a gate definition, not local configuration: it holds
+# no secrets and nothing environment-specific, and a gate that is not
+# versioned cannot be rolled back to or argued with.
+!config/canary.json
 .DS_Store
 /.env
 /.env.*
