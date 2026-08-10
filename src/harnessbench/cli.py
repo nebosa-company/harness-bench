@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import re
 import time
 import traceback
@@ -169,6 +170,26 @@ def _resolve_run_task_id(tasks: dict, *, task: str | None, num: int | None) -> s
 
 
 def main() -> int:
+    # Redirected stdout on Windows is cp1252, and every result summary is
+    # printed with `ensure_ascii=False`. A suite whose output contained one
+    # non-Latin-1 character therefore ran to completion, printed nothing, and
+    # exited non-zero on the final `print` — after all the work was done.
+    #
+    # Measured: a 20-task calibration finished every task and then died on the
+    # summary. The orchestrator above it read the exit code, concluded the run
+    # had failed, and abandoned the second half. Roughly ninety minutes of
+    # completed work discarded by an encoding default.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                # A stream that cannot be reconfigured is one we did not open;
+                # `errors="replace"` below is not available, so leave it be
+                # rather than failing at startup over an output detail.
+                pass
+
     args = _build_parser().parse_args()
     app_cfg = load_app_config()
     model_cfgs = load_model_config()

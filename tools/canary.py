@@ -114,13 +114,29 @@ def calibrate(args, canary: dict) -> int:
     for n in range(runs):
         started = time.time()
         code = run_suite(args.harness, tasks, f"run {n + 1} of {runs}")
-        if code != 0:
-            print(f"run {n + 1} exited {code} — calibration abandoned", file=sys.stderr)
-            return code
+
+        # Snapshot before judging the exit code, never after.
+        #
+        # The first calibration ran all twenty tasks and then died printing its
+        # summary — a Windows encoding default, with every result already
+        # safely on disk. This read the exit code, called it a failed run,
+        # returned, and abandoned the second half. Ninety minutes of completed
+        # work thrown away because the process that produced it stumbled on the
+        # way out of the door.
         into = out_root / f"run-{n + 1}"
         copied = snapshot(results_root, started, into)
         kept.append(into)
         print(f"[run {n + 1} of {runs}] {copied} result files -> {into}", flush=True)
+
+        if code != 0:
+            if copied == 0:
+                print(f"run {n + 1} exited {code} and produced nothing — abandoned",
+                      file=sys.stderr)
+                return code
+            # Work survived. Say so loudly and carry on: a partial run is still
+            # a measurement, and the comparison below reports what it covered.
+            print(f"  run {n + 1} exited {code}, but {copied} results were written "
+                  f"and have been kept", file=sys.stderr)
 
     print()
     if len(kept) >= 2:
