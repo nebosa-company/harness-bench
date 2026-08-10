@@ -27,6 +27,7 @@
   "noise_band": null,
   "noise_band_measured_at": null,
   "runs_for_noise_band": 2,
+  "_snapshots": "data_try6/canary/<harness>/run-N — written by tools/canary.py --calibrate, because the runner keys results by task id alone and a second run would otherwise overwrite the first",
 
   "classes": {
     "binding": {

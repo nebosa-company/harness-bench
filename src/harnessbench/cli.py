@@ -66,6 +66,17 @@ def _build_parser() -> argparse.ArgumentParser:
     run_suite_p.add_argument("--mode", default="live")
     run_suite_p.add_argument("--delete-sandbox", action="store_true")
     run_suite_p.add_argument(
+        "--tasks",
+        metavar="ID,ID,...",
+        default=None,
+        help=(
+            "Run exactly these task ids, comma separated, in the order given. "
+            "For a set that is not a contiguous range — the canary suite is chosen "
+            "by failure class, so its tasks are scattered through the numbering and "
+            "no range expresses it. Mutually exclusive with the range flags."
+        ),
+    )
+    run_suite_p.add_argument(
         "--from-task",
         metavar="TASK_ID",
         default=None,
@@ -205,8 +216,30 @@ def main() -> int:
         to_raw = getattr(args, "to_task", None)
         from_num = getattr(args, "from_num", None)
         to_num = getattr(args, "to_num", None)
+        explicit = getattr(args, "tasks", None)
         num_mode = from_num is not None or to_num is not None
-        if num_mode:
+        if explicit:
+            if from_raw is not None or to_raw is not None or num_mode:
+                raise SystemExit(
+                    "run-suite: --tasks names an exact set; it cannot be combined "
+                    "with the range flags"
+                )
+            wanted = [t.strip() for t in str(explicit).split(",") if t.strip()]
+            known = set(all_ids)
+            # Named and absent is a typo, and running 19 of 20 tasks while
+            # reporting success is how a suite silently stops covering what it
+            # claims to. Refuse instead.
+            unknown = [t for t in wanted if t not in known]
+            if unknown:
+                raise SystemExit(f"run-suite: no such task(s): {', '.join(unknown)}")
+            seen: set[str] = set()
+            task_ids = [t for t in wanted if not (t in seen or seen.add(t))]
+            print(
+                f"[harnessbench] run-suite explicit set: {len(task_ids)} task(s) "
+                f"of {len(all_ids)} total",
+                flush=True,
+            )
+        elif num_mode:
             if from_raw is not None or to_raw is not None:
                 raise SystemExit(
                     "run-suite: choose either numeric range (--from-num / --to-num) "

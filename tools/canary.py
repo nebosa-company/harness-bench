@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -70,29 +71,87 @@ def run_suite(harness: str, tasks: list[str], label: str) -> int:
         "--tasks", ",".join(tasks),
     ]
     print(f"[{label}] {' '.join(cmd)}", flush=True)
-    return subprocess.call(cmd, cwd=ROOT)
+    # `src` on the path: the package is not installed into this interpreter, and
+    # discovering that four hours into a calibration run would be a poor way to
+    # learn it.
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.call(cmd, cwd=ROOT, env=env)
+
+
+def snapshot(results_root: Path, since: float, into: Path) -> int:
+    """Copy this run's result files somewhere the next run cannot overwrite.
+
+    The runner writes `results/<harness>/<label>/<task>.json`, keyed by task and
+    nothing else, so a second run of the same suite overwrites the first — and
+    an A/A calibration whose two halves land on the same paths measures nothing
+    at all. Selected by modification time rather than by name, because the label
+    directory is chosen by the runner and is not ours to predict.
+    """
+    into.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for path in results_root.rglob("*.json"):
+        if path.stat().st_mtime >= since:
+            (into / path.name).write_bytes(path.read_bytes())
+            copied += 1
+    return copied
 
 
 def calibrate(args, canary: dict) -> int:
     """The A/A run: same code, twice, to find out what noise looks like."""
+    import time
+
     tasks = tasks_of(canary)
     runs = canary.get("runs_for_noise_band", 2)
-    print(f"A/A calibration: {args.harness}, {len(tasks)} tasks, {runs} times.")
-    print("Nothing is being compared. This measures how much the suite moves on its own.\n")
+    results_root = ROOT / "data_try6" / "results"
+    out_root = ROOT / "data_try6" / "canary" / args.harness
 
+    print(f"A/A calibration: {args.harness}, {len(tasks)} tasks, {runs} times.")
+    print("Nothing is being compared. This measures how much the suite moves on its own.")
+    print(f"snapshots: {out_root}\n")
+
+    kept = []
     for n in range(runs):
+        started = time.time()
         code = run_suite(args.harness, tasks, f"run {n + 1} of {runs}")
         if code != 0:
             print(f"run {n + 1} exited {code} — calibration abandoned", file=sys.stderr)
             return code
+        into = out_root / f"run-{n + 1}"
+        copied = snapshot(results_root, started, into)
+        kept.append(into)
+        print(f"[run {n + 1} of {runs}] {copied} result files -> {into}", flush=True)
 
     print()
-    print("Now read the per-task results of the two runs and write the spread into")
+    if len(kept) >= 2:
+        print("Per-task spread between two runs of identical code:")
+        print()
+        base = scores(kept[0], tasks)
+        cand = scores(kept[1], tasks)
+        shared = sorted(set(base) & set(cand))
+        if shared:
+            moves = [abs(cand[t] - base[t]) for t in shared]
+            for task in sorted(shared, key=lambda t: -abs(cand[t] - base[t])):
+                move = cand[task] - base[task]
+                if abs(move) > 1e-9:
+                    print(f"  {task:38s} {base[task]:.2f} -> {cand[task]:.2f}  ({move:+.2f})")
+            mean_move = statistics.mean(cand[t] - base[t] for t in shared)
+            print()
+            print(f"  tasks compared:     {len(shared)}")
+            print(f"  tasks that moved:   {sum(1 for m in moves if m > 1e-9)}")
+            print(f"  largest single move:{max(moves) * 100:6.2f} points")
+            print(f"  mean difference:    {mean_move * 100:+6.2f} points")
+            print()
+            print("  The mean difference is the number to beat. Two runs of the same")
+            print("  code should average zero; whatever it actually is, is the floor")
+            print("  below which a candidate's gain is indistinguishable from luck.")
+
+    print()
+    print("Write the band into")
     print(f"  {CANARY.relative_to(ROOT)}  ->  \"noise_band\"")
     print()
-    print("The band is the largest mean difference you are willing to call noise.")
-    print("A candidate must beat it to be promoted. Until it is a number, --compare")
-    print("will report and decide nothing, which is the correct behaviour.")
+    print("Until it is a number, --compare will report and decide nothing, which is")
+    print("the correct behaviour.")
     return 0
 
 
