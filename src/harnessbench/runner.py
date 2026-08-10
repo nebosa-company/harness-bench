@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import time
@@ -670,7 +671,16 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
     }
     elapsed_sec = round(time.perf_counter() - t_run_start, 3)
     payload["elapsed_sec"] = elapsed_sec
-    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Written whole, then moved into place. A reader that opens the result the
+    # moment it appears used to get a half-written file: during one round that
+    # produced a phantom zero on 039-repo-architecture-map (settled 0.85) and
+    # two different "final" figures for the same round, 79.26% and 79.36%. The
+    # harness quiesced correctly the whole time; nothing announced it. os.replace
+    # is atomic on the same filesystem, so the file either is not there or is
+    # complete — there is no third state for a reader to catch.
+    staging = out_file.with_suffix(out_file.suffix + ".partial")
+    staging.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(staging, out_file)
 
     result = TaskRunResult(
         task_id=task.task_id,
