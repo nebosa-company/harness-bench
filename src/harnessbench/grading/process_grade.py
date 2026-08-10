@@ -226,6 +226,19 @@ def compute_scoring(
     trace = extract_proxy_trace_incremental(proxy_dir)
     trace_error = trace.get("error")
 
+    # A claude-cli link is a subprocess, not an address, so there is no wire for
+    # the proxy to sit on and three of six Harness-Bench rounds failed here
+    # before the rubric was attempted. The journal is the other record of the
+    # same run, and for grading process it is arguably the better one: it holds
+    # what the loop decided and why, not a replay of prompt text.
+    if trace_error:
+        from harnessbench.grading.journal_trace import extract_journal_trace
+
+        fallback = extract_journal_trace(sandbox)
+        if not fallback.get("error"):
+            trace = fallback
+            trace_error = None
+
     outcome_raw = oracle_result.get("outcome_score")
     oracle_outcome: float | None = float(outcome_raw) if isinstance(outcome_raw, (int, float)) else None
 
