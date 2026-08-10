@@ -23,14 +23,81 @@ _TRYCLOUDFLARE_RE = re.compile(
 )
 
 
+# Where a tunnel binary actually lives when it is not on PATH.
+#
+# cloudflared installs to Program Files and does not add itself, so
+# `shutil.which` says no and the caller falls through to whatever is next —
+# which is how a working cloudflared lost to an unauthenticated ngrok and hung
+# the suite. Looking in the obvious places is cheaper than the failure.
+_TUNNEL_BINARY_HINTS = (
+    r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
+    r"C:\Program Files\cloudflared\cloudflared.exe",
+    "/usr/local/bin/cloudflared",
+    "/usr/bin/cloudflared",
+    "/opt/homebrew/bin/cloudflared",
+)
+
+
+def _find_tunnel_binary(name: str) -> str | None:
+    """`shutil.which`, then the places installers actually use."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for hint in _TUNNEL_BINARY_HINTS:
+        if Path(hint).name.lower().startswith(name.lower()) and Path(hint).is_file():
+            return hint
+    return None
+
+
+def _read_lines_without_blocking_forever(proc, deadline):
+    """Yield the child's stdout lines until `deadline`, whatever the child does.
+
+    `readline()` blocks, so a deadline loop built on it is only a deadline while
+    the child keeps talking. A child that goes quiet without exiting — an
+    unauthenticated ngrok is exactly this — parks the caller forever. Measured:
+    a calibration run stopped for 44 minutes on one task, the runner holding 3.2
+    seconds of CPU, until the tunnel was killed by hand.
+
+    A daemon thread does the blocking read and a queue carries the lines back,
+    so the timeout belongs to the reader rather than to the writer's goodwill.
+    """
+    import queue
+    import threading
+
+    lines: "queue.Queue[str]" = queue.Queue()
+
+    def pump():
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                lines.put(line)
+        except Exception:
+            pass
+        finally:
+            lines.put("")  # the child closed its output
+
+    threading.Thread(target=pump, daemon=True).start()
+
+    while time.time() < deadline:
+        try:
+            line = lines.get(timeout=0.25)
+        except queue.Empty:
+            if proc.poll() is not None:
+                return
+            continue
+        if not line:
+            return
+        yield line
+
+
 def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[str] | None]:
     public_url_template = os.environ.get("HARNESSBENCH_PUBLIC_URL_TEMPLATE", "").strip()
     if public_url_template:
         return public_url_template.format(local_url=local_url).rstrip("/"), None
 
     tunnel_cmd = os.environ.get("HARNESSBENCH_TUNNEL_CMD", "").strip()
-    if not tunnel_cmd and shutil.which("cloudflared"):
-        tunnel_cmd = "cloudflared tunnel --url {local_url} --no-autoupdate"
+    cloudflared = _find_tunnel_binary("cloudflared")
+    if not tunnel_cmd and cloudflared:
+        tunnel_cmd = f'"{cloudflared}" tunnel --url {{local_url}} --no-autoupdate'
     # `--log=stdout` is not optional: ngrok's default is a curses UI that never
     # writes the URL to stdout, so the reader below would time out on a tunnel
     # that came up perfectly.
@@ -50,15 +117,11 @@ def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[s
         text=True,
     )
 
-    deadline = time.time() + 15.0
+    # 30 seconds, and it is now a real bound rather than one that holds only
+    # while the child keeps writing.
+    deadline = time.time() + 30.0
     captured: list[str] = []
-    while time.time() < deadline:
-        if proc.poll() is not None:
-            break
-        line = proc.stdout.readline() if proc.stdout else ""
-        if not line:
-            time.sleep(0.1)
-            continue
+    for line in _read_lines_without_blocking_forever(proc, deadline):
         captured.append(line.rstrip("\n"))
         cf_match = _TRYCLOUDFLARE_RE.search(line)
         if cf_match:
@@ -69,8 +132,14 @@ def _start_public_tunnel(local_url: str) -> tuple[str | None, subprocess.Popen[s
 
     try:
         proc.terminate()
-    except OSError:
-        pass
+        proc.wait(timeout=5)
+    except Exception:
+        # `terminate` is a request. A tunnel that ignores it would outlive the
+        # run and hold its port, so the second ask is not a request.
+        try:
+            proc.kill()
+        except Exception:
+            pass
     raise RuntimeError(
         "failed to discover public tunnel URL from HARNESSBENCH_TUNNEL_CMD output: "
         + " | ".join(captured[-5:])
