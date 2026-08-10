@@ -63,6 +63,39 @@ def scores(results_dir: Path, wanted: list[str]) -> dict[str, float]:
     return out
 
 
+def preserve_existing(results_root: Path, harness: str, tasks: list[str]) -> int:
+    """Copy the results a round is about to overwrite (Stage 0.3).
+
+    The runner keys results by task id alone, so starting a round destroys the
+    previous one's answers for every task it touches. That already happened
+    once: twelve canary baselines were overwritten before the collision was
+    noticed, and they are not recoverable.
+
+    Snapshotting between the two halves of an A/A pair — which is what this
+    script did first — protects the pair and nothing else. A round still eats
+    the round before it.
+    """
+    into = results_root.parent / "canary" / harness / "before-this-round"
+    into.mkdir(parents=True, exist_ok=True)
+    kept = 0
+    for path in results_root.rglob("*.json"):
+        if path.name.endswith(".regraded.json"):
+            continue
+        if path.stem not in tasks:
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if data.get("model_id") != harness:
+            continue
+        (into / path.name).write_bytes(path.read_bytes())
+        kept += 1
+    if kept:
+        print(f"[preserved] {kept} result(s) this round would overwrite -> {into}", flush=True)
+    return kept
+
+
 def run_suite(harness: str, tasks: list[str], label: str) -> int:
     """One canary round. Returns the process exit code."""
     cmd = [
@@ -118,6 +151,10 @@ def calibrate(args, canary: dict) -> int:
     print(f"A/A calibration: {args.harness}, {len(tasks)} tasks, {runs} times.")
     print("Nothing is being compared. This measures how much the suite moves on its own.")
     print(f"snapshots: {out_root}\n")
+
+    # Before anything runs: whatever is on disk for these tasks is about to be
+    # overwritten, and once it is, it is gone (Stage 0.3).
+    preserve_existing(results_root, args.harness, tasks)
 
     kept = []
     for n in range(runs):
