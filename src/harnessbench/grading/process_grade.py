@@ -222,22 +222,30 @@ def compute_scoring(
         if raw:
             cfg_oc = Path(raw).expanduser()
 
+    from harnessbench.grading.journal_trace import extract_journal_trace
+
     proxy_dir = sandbox / "usage-proxy"
     trace = extract_proxy_trace_incremental(proxy_dir)
     trace_error = trace.get("error")
 
-    # A claude-cli link is a subprocess, not an address, so there is no wire for
-    # the proxy to sit on and three of six Harness-Bench rounds failed here
-    # before the rubric was attempted. The journal is the other record of the
-    # same run, and for grading process it is arguably the better one: it holds
-    # what the loop decided and why, not a replay of prompt text.
-    if trace_error:
-        from harnessbench.grading.journal_trace import extract_journal_trace
-
-        fallback = extract_journal_trace(sandbox)
-        if not fallback.get("error"):
-            trace = fallback
-            trace_error = None
+    # Prefer Perpetum's journal over the wire, when there is one.
+    #
+    # Not a fallback any more — measured on 003-browser, the proxy trace was 2
+    # entries and 765 characters carrying zero tool calls, and the journal was 17
+    # entries and 8,309 characters. The rubric graded the proxy version 0.0 with
+    # the note "no tool calls; agent only read the pre-existing output file",
+    # which is an accurate reading of the last turn and a false one about the
+    # run: incremental extraction keeps the final response, and a loop whose last
+    # turn verifies its own finished work legitimately calls nothing there.
+    #
+    # Perpetum compounds it. At the prompted rung its tool calls are fenced
+    #  text blocks, not API , so a proxy looking for the
+    # latter cannot see them at any turn. The journal is the run's own complete
+    # record and is the right instrument for grading how a run went.
+    journal = extract_journal_trace(sandbox)
+    if not journal.get("error"):
+        trace = journal
+        trace_error = None
 
     outcome_raw = oracle_result.get("outcome_score")
     oracle_outcome: float | None = float(outcome_raw) if isinstance(outcome_raw, (int, float)) else None
