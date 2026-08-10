@@ -129,6 +129,30 @@ def load_openclaw_chat_credentials(path: Path) -> tuple[str | None, str | None, 
     return key, base, model_id
 
 
+def _repo_rubric_config() -> tuple[str | None, str | None, str | None]:
+    """`(api_key, base_url, model)` from `config/rubric.json`, if it is there.
+
+    Absent is normal and silent — a checkout with no rubric configured is a
+    valid state. What is *not* silent is being configured for a provider that
+    turns out to be exhausted: that shows up as `skipped` on every task, and
+    the caller reports it.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "config" / "rubric.json"
+        if candidate.is_file():
+            try:
+                cfg = json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                return (None, None, None)
+            return (
+                (cfg.get("api_key") or None),
+                (cfg.get("base_url") or None),
+                (cfg.get("model") or None),
+            )
+    return (None, None, None)
+
+
 def _default_openclaw_config_path() -> Path | None:
     p = os.environ.get("OPENCLAW_USER_CONFIG", "").strip()
     if p:
@@ -237,9 +261,23 @@ def run_llm_rubric(
     if cfg_path is not None and cfg_path.is_file():
         ok, ob, om = load_openclaw_chat_credentials(cfg_path)
 
+    # `config/rubric.json`, above OPENAI_API_KEY and below RUBRIC_API_KEY.
+    #
+    # The process metric was configured once as RUBRIC_* environment variables
+    # and did not survive the shell it was typed in. Every later run fell
+    # through to OPENAI_API_KEY against an account with no credit, took HTTP 429
+    # on every task, and recorded process as skipped — which reads identically
+    # to a run where nobody wanted a process score. Six graded rounds reported a
+    # combined figure built on a default of 1.0 because of it.
+    #
+    # A file, so the configuration outlives the shell. Still below RUBRIC_*, so
+    # a one-off override is still one `export` away.
+    rk, rb, rm = _repo_rubric_config()
+
     key = (
         api_key
         or os.environ.get("RUBRIC_API_KEY")
+        or rk
         or os.environ.get("OPENAI_API_KEY")
         or ok
     )
@@ -256,10 +294,11 @@ def run_llm_rubric(
     base = (
         base_url
         or os.environ.get("RUBRIC_BASE_URL")
+        or rb
         or ob
         or "https://api.openai.com/v1"
     ).rstrip("/")
-    mdl = model or os.environ.get("RUBRIC_MODEL") or om or "gpt-4o-mini"
+    mdl = model or os.environ.get("RUBRIC_MODEL") or rm or om or "gpt-4o-mini"
     if isinstance(user, list):
         vm = os.environ.get("RUBRIC_VISION_MODEL", "").strip()
         if vm:
