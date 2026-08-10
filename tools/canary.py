@@ -76,6 +76,15 @@ def run_suite(harness: str, tasks: list[str], label: str) -> int:
     # learn it.
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    # Belt and braces over `cli.py`'s own reconfigure. The characters that
+    # killed the first calibration are not exotic and are not going away: 118 of
+    # them were perp's own prose in `adapter_result.stdout` (it writes `→`, em
+    # dashes and non-breaking hyphens by choice) and 72 were the Chinese labels
+    # this repository's own task definitions carry. Any run capturing that
+    # output on a cp1252 stream is one `print` away from the same death, so the
+    # child is told UTF-8 rather than trusted to work it out.
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8:replace"
     return subprocess.call(cmd, cwd=ROOT, env=env)
 
 
