@@ -24,8 +24,38 @@
     "number, this suite reports and decides nothing."
   ],
 
-  "noise_band": null,
-  "noise_band_measured_at": null,
+  "_noise_band_note": [
+    "Measured 2026-08-10 by running this suite twice against the same binary",
+    "(perp.exe built 20:09 from da682bb). Nothing about the harness changed",
+    "between the two halves.",
+    "",
+    "The two runs differed by +4.34 points on the mean. Four of nineteen tasks",
+    "moved, and one of them moved by half: 008-image-recognize scored 0.50 then",
+    "1.00. That is what identical code looks like on this suite.",
+    "",
+    "0.0577 is two standard errors of the mean difference (SE = 2.89 points).",
+    "A candidate must beat it to be called an improvement rather than weather.",
+    "",
+    "This is an EXECUTION noise band only. The rubric is also non-deterministic",
+    "-- regrading the same 12 tasks twice gave 57.40% then 56.77% -- so a band",
+    "for a COMBINED score must be wider than this one. Do not reuse this number",
+    "for process or combined comparisons.",
+    "",
+    "Not compared: 003-browser, which produced no result in run 1 (its tunnel",
+    "hung and the process was killed). 19 of 20 tasks back this figure."
+  ],
+  "noise_band": 0.0577,
+  "noise_band_measured_at": "2026-08-10",
+  "noise_band_basis": {
+    "runs": 2,
+    "binary": "perp.exe 20:09 from da682bb",
+    "tasks_compared": 19,
+    "tasks_moved": 4,
+    "mean_difference": 0.0434,
+    "largest_single_move": 0.50,
+    "std_error_of_mean": 0.0289,
+    "control_tasks_moved": 0
+  },
   "runs_for_noise_band": 2,
   "_snapshots": "data_try6/canary/<harness>/run-N — written by tools/canary.py --calibrate, because the runner keys results by task id alone and a second run would otherwise overwrite the first",
 
