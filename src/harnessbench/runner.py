@@ -511,6 +511,134 @@ def _collect_proxy_usage_summary(log_file: Path, session_id: str) -> dict[str, A
     return summary
 
 
+# Per-MTok prices: (cache-read, input, output). The same numbers the comparison
+# tools carry, kept here so a round records its own cost instead of having one
+# imputed for it afterwards.
+#
+# Only Perpetum+Flash ever journalled a charge. Grok recorded requests and zero
+# tokens; Opus recorded tokens and zero requests; dsh keeps no call log at all.
+# So the four-round report priced three of its four columns from a table it held
+# itself, which makes the cost a property of the reader rather than of the run.
+# A harness config may override these under `prices`, and the row says which it
+# used -- a number whose basis is unrecorded is the thing this replaces.
+DEFAULT_PRICES = {
+    "opus": (0.50, 5.00, 25.00),
+    "sonnet": (0.30, 3.00, 15.00),
+    "deepseek-v4-pro": (0.003625, 0.435, 0.87),
+    "deepseek-v4-flash": (0.0028, 0.14, 0.28),
+}
+
+
+def price_usage(summary: dict[str, Any], model_label: str, model_cfg: dict[str, Any]) -> None:
+    """Attach a recorded cost to a usage summary, in place.
+
+    Silent about what it cannot price: an unknown model gets `cost_usd: None`
+    with a reason, never a zero. A round that cost nothing and a round nobody
+    could price are different facts, and sharing a number is how the second gets
+    reported as the first.
+    """
+    if not isinstance(summary, dict) or not summary.get("available"):
+        return
+    table = {**DEFAULT_PRICES, **(model_cfg.get("prices") or {})}
+    basis = "config" if (model_cfg.get("prices") or {}).get(model_label) else "default"
+
+    price = table.get(model_label)
+    if price is None:
+        # Try the models the proxy actually saw, which is the honest second
+        # guess: the config names what was asked for, the trace names what
+        # answered, and a fallback link means those differ.
+        for seen in summary.get("models") or []:
+            if seen in table:
+                price, basis, model_label = table[seen], f"{basis} (matched on the model that answered)", seen
+                break
+
+    if price is None:
+        summary["cost_usd"] = None
+        summary["cost_basis"] = f"no price on file for {model_label!r}"
+        return
+
+    cache_read, inp, out = price
+    tokens = lambda key: int(summary.get(key) or 0)  # noqa: E731
+    # Cache reads are billed apart and are already excluded from `input_tokens`
+    # by the proxy summary, so they are added rather than netted off.
+    summary["cost_usd"] = round(
+        (tokens("cache_read_tokens") * cache_read
+         + tokens("input_tokens") * inp
+         + tokens("output_tokens") * out) / 1_000_000.0,
+        6,
+    )
+    summary["cost_basis"] = f"{basis}: {model_label} @ {cache_read}/{inp}/{out} per MTok"
+
+
+def write_setup_failure(
+    app: AppConfig,
+    task: TaskSpec,
+    model_id: str,
+    model_cfg: dict[str, Any],
+    mode: str,
+    exc: BaseException,
+    traceback_text: str,
+    elapsed_sec: float = 0.0,
+) -> Path:
+    """Persist a result row for a task that never reached its agent.
+
+    Six tasks in one round finished without writing a result file, so they left
+    no trace at all: not a zero, an absence, and a denominator quietly smaller
+    than everyone else's. Both causes were environmental and neither was visible
+    from the results -- `cloudflared` missing from the distro killed the tunnel
+    tasks inside `hooks.prepare_runtime`, and an API key that did not cross into
+    WSL made the agent exit 3 rather than run unrecorded. Re-run with both
+    fixed, five of them scored 1.00, 1.00, 0.90, 1.00 and 0.45, and two were
+    tasks other harnesses had taken zeros on.
+
+    **A scored zero is a claim; an absence is a hole that flatters whoever fell
+    in it.** This writes neither: the row exists, and it carries
+    `combined_score: None` with a reason in `combined_unavailable`, which is the
+    shape `process_grade` already uses for a task it could not score. A
+    collector that averages over scored rows is unaffected; one that counts rows
+    now sees the task, and nothing can silently shrink a round again.
+    """
+    api_slug = _api_slug_from_model_label(str(model_cfg.get("model") or model_id))
+    result_dir = app.results_dir / model_id / api_slug
+    result_dir.mkdir(parents=True, exist_ok=True)
+    out_file = result_dir / f"{task.task_id}.json"
+
+    reason = f"{type(exc).__name__}: {exc}".strip()
+    payload = {
+        "task_id": task.task_id,
+        "model_id": model_id,
+        "api_model_slug": api_slug,
+        "api_model_label": str(model_cfg.get("model") or model_id),
+        "mode": mode,
+        # The fields a reader expects, present and honestly empty rather than
+        # absent -- a missing key and a failed run are different facts.
+        "adapter_result": None,
+        "adapter_results": [],
+        "usage_summary": {},
+        "oracle_result": None,
+        "runtime_state": {},
+        "elapsed_sec": round(elapsed_sec, 3),
+        # The part that matters.
+        "setup_failed": True,
+        "setup_error": reason,
+        "setup_traceback": traceback_text,
+        "scoring": {
+            "combined_score": None,
+            "combined_unavailable": f"setup failed before the agent ran: {reason}",
+            "notes": (
+                "no score: this task never reached its agent, so there is nothing to grade. "
+                "Counted as attempted-and-unrun rather than dropped."
+            ),
+        },
+    }
+    # Atomic, for the same reason the completed path is: a reader that opens the
+    # file the moment it appears must never see half of it.
+    staging = out_file.with_suffix(out_file.suffix + ".partial")
+    staging.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(staging, out_file)
+    return out_file
+
+
 def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str, Any], mode: str, keep_workspace: bool = True) -> TaskRunResult:
     t_run_start = time.perf_counter()
     sandbox, _initial_api_seg, _sandbox_suffix = _create_sandbox_dir(app.work_root, task.task_id, model_id, model_cfg)
@@ -636,6 +764,10 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
         shutil.rmtree(sandbox, ignore_errors=True)
         workspace_kept_final = False
 
+    # `6b`: the round records what it cost, rather than a reader imputing it
+    # later from a table of its own. One place, because the summary above has
+    # several possible sources and each of them would otherwise need this.
+    price_usage(usage_summary, api_label, model_cfg)
     runtime_state_json = {k: v for k, v in runtime_state.items() if isinstance(v, (str, int, float, bool))}
     payload = {
         "task_id": task.task_id,

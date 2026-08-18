@@ -8,7 +8,7 @@ import time
 import traceback
 
 from harnessbench.config import load_app_config, load_model_config
-from harnessbench.runner import run_task
+from harnessbench.runner import run_task, write_setup_failure
 from harnessbench.tasks import load_tasks
 
 _TASK_LEADING_NUM = re.compile(r"^(\d+)-")
@@ -207,7 +207,24 @@ def main() -> int:
     if args.cmd == "run-task":
         task_id = _resolve_run_task_id(tasks, task=args.task, num=args.num)
         print(f"[harnessbench] run-task {task_id} (harness={args.harness}, mode={args.mode}) ...", flush=True)
-        result = run_task(app_cfg, tasks[task_id], args.harness, model_cfg, args.mode, keep_workspace=not args.delete_sandbox)
+        # The same rule as the suite loop: a task that dies in setup is recorded
+        # rather than dropped. A single run is where a setup failure is usually
+        # *discovered*, so leaving this path silent would mean the first place
+        # anyone looks is the one place that says nothing.
+        try:
+            result = run_task(app_cfg, tasks[task_id], args.harness, model_cfg, args.mode, keep_workspace=not args.delete_sandbox)
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            recorded = write_setup_failure(
+                app_cfg, tasks[task_id], args.harness, model_cfg, args.mode, exc, traceback.format_exc()
+            )
+            print(
+                f"[harnessbench] run-task {task_id} FAILED in setup: {type(exc).__name__}: {exc} "
+                f"(recorded {recorded.name})",
+                flush=True,
+            )
+            raise
         elapsed_sec = result.elapsed_sec
         ok = getattr(result.adapter_result, "ok", False)
         print(f"[harnessbench] run-task {task_id} finished adapter_ok={ok} elapsed={elapsed_sec}s", flush=True)
@@ -295,32 +312,75 @@ def main() -> int:
             print(json.dumps([], ensure_ascii=False, indent=2))
             return 0
         suite_t0 = time.perf_counter()
+        # `6c`: the round keeps its own log, beside its own results.
+        #
+        # Two suite logs were destroyed in one day because they lived in `/tmp`,
+        # which this machine wipes without a reboot, and one investigation then
+        # ran blind for hours. A log that depends on the operator remembering to
+        # redirect -- and on the redirect's target surviving -- is not evidence,
+        # it is a habit. This one lands next to the results it explains, and a
+        # failure to open it is reported rather than ending the run.
+        log_file = None
+        try:
+            log_dir = app_cfg.results_dir / args.harness
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = (log_dir / "run-suite.log").open("a", encoding="utf-8")
+        except OSError as exc:
+            print(f"[harnessbench] run-suite: no run log ({exc})", flush=True)
+
+        def say(line: str) -> None:
+            print(line, flush=True)
+            if log_file:
+                log_file.write(line + chr(10))
+                log_file.flush()
+
+        say(
+            f"[harnessbench] run-suite start: {total} task(s), harness={args.harness}, "
+            f"mode={args.mode}"
+        )
         for idx, task_id in enumerate(task_ids, start=1):
-            print(
-                f"[harnessbench] run-suite [{idx}/{total}] {task_id} (harness={args.harness}, mode={args.mode}) ...",
-                flush=True,
-            )
+            say(f"[harnessbench] run-suite [{idx}/{total}] {task_id} (harness={args.harness}, mode={args.mode}) ...")
             try:
                 result = run_task(app_cfg, tasks[task_id], args.harness, model_cfg, args.mode, keep_workspace=not args.delete_sandbox)
             except KeyboardInterrupt:
                 raise
             except Exception as exc:
                 had_failures = True
+                trace = traceback.format_exc()
+                # A task that dies in setup leaves a row saying so. Without this
+                # it left nothing at all -- six tasks in one round vanished from
+                # the results entirely, which reads as a smaller suite rather
+                # than as six failures, and flatters the round that lost them.
+                recorded = None
+                try:
+                    recorded = write_setup_failure(
+                        app_cfg, tasks[task_id], args.harness, model_cfg, args.mode, exc, trace
+                    )
+                except Exception as write_exc:  # never let bookkeeping end the suite
+                    print(
+                        f"[harnessbench] run-suite [{idx}/{total}] {task_id} could not record its "
+                        f"own failure: {type(write_exc).__name__}: {write_exc}",
+                        flush=True,
+                    )
+                say(
+                    f"[harnessbench] run-suite [{idx}/{total}] {task_id} FAILED in setup: "
+                    f"{type(exc).__name__}: {exc}"
+                    + (f" (recorded {recorded.name})" if recorded else "")
+                )
                 outputs.append(
                     {
                         "task_id": task_id,
                         "ok": False,
                         "error_type": type(exc).__name__,
                         "error": str(exc),
-                        "traceback": traceback.format_exc(),
+                        "traceback": trace,
+                        "recorded": str(recorded) if recorded else None,
                     }
                 )
                 continue
             elapsed_sec = result.elapsed_sec
             ok = getattr(result.adapter_result, "ok", False)
-            print(
-                f"[harnessbench] run-suite [{idx}/{total}] {task_id} finished adapter_ok={ok} elapsed={elapsed_sec}s",
-            )
+            say(f"[harnessbench] run-suite [{idx}/{total}] {task_id} finished adapter_ok={ok} elapsed={elapsed_sec}s")
             outputs.append(
                 {
                     "task_id": result.task_id,
@@ -335,10 +395,13 @@ def main() -> int:
                 }
             )
         suite_elapsed_sec = round(time.perf_counter() - suite_t0, 3)
-        print(
-            f"[harnessbench] run-suite finished {total} tasks wall_elapsed={suite_elapsed_sec}s",
-            flush=True,
+        dropped = [o["task_id"] for o in outputs if not o.get("ok")]
+        say(
+            f"[harnessbench] run-suite finished {total} tasks wall_elapsed={suite_elapsed_sec}s"
+            + (f" -- {len(dropped)} failed in setup: {', '.join(dropped)}" if dropped else "")
         )
+        if log_file:
+            log_file.close()
         print(json.dumps(outputs, ensure_ascii=False, indent=2))
         return 1 if had_failures else 0
 
