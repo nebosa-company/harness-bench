@@ -753,6 +753,53 @@ td.t { min-width:210px; }
 .lg p { margin:7px 0 0; font-size:12.5px; color:var(--muted); line-height:1.5; }
 footer { color:var(--muted); font-size:12.5px; border-top:1px solid var(--line); padding-top:20px; }
 @media (max-width:640px) { .wrap{padding:36px 16px 64px} h1{font-size:27px} }
+
+/* ---- print / PDF -------------------------------------------------------
+   Every table on this page lives in an `overflow-x:auto` box, which is right
+   on screen and catastrophic on paper: the overflow is simply cut off, and a
+   reader would never know a column was missing. On paper the boxes open up
+   and the page turns landscape to hold them. */
+@media print {
+  @page { size: A3 landscape; margin: 11mm 10mm; }
+
+  /* Paper is white whatever the screen was set to, and the colours that carry
+     meaning -- the task map, the value-stream bars, the score chips -- have to
+     survive the printer's instinct to drop backgrounds. */
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --paper:#fff; --surface:#fff; --ink:#171a21; --muted:#5c6675; --line:#c9ced6;
+    --accent:#1f5f8b; --pass:#2f6d4a; --high:#4f7f5f; --mid:#9a6a10; --low:#b1592f;
+    --fail:#a83a36; --miss:#c9ced6; --sig:#8a4fbf; --shadow:none;
+  }
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  body { background:#fff; font-size:9.5pt; }
+  .wrap { max-width:none; padding:0; gap:22px; }
+
+  .scroll { overflow:visible !important; box-shadow:none; border-radius:0; }
+  table { width:100%; }
+  #tasks table, .mtbl table { min-width:0 !important; }
+  .mtbl th:first-child, .mtbl td:first-child { width:230px; }
+  td, th { padding:5px 7px; font-size:8.5pt; }
+  .mh { font-size:7.5pt; }
+
+  /* A header that repeats is the difference between page four being readable
+     and page four being a grid of unlabelled numbers. */
+  thead { display:table-header-group; }
+  tr { break-inside:avoid; }
+  th { position:static !important; }
+
+  h1 { font-size:20pt; }
+  h2 { font-size:13pt; break-after:avoid; }
+  h3.sub { font-size:11pt; break-after:avoid; }
+  section { break-inside:auto; }
+  .hero, .legend, .vsrow, .maprow, .note { break-inside:avoid; }
+  .lede { max-width:none; }
+  a { color:inherit; text-decoration:none; }
+
+  /* 424 cells of task map are worth the ink; keep them from splitting a run
+     across a page turn. */
+  .strip { break-inside:avoid; }
+  .cell { width:11px; height:11px; }
+}
 """
 
 hero = ""

@@ -14,6 +14,29 @@ python tools/collect_comparison.py && python tools/render_comparison.py
 Roughly a minute, most of it in the collector. Deterministic: same inputs, same
 page. No model is called at any point.
 
+## The PDF
+
+`render_comparison.py` carries a print stylesheet, so the page can be printed
+without losing anything. That matters more than it sounds: every table lives in
+an `overflow-x:auto` box, and on paper the overflow is simply cut off — a raw
+print drops the two rightmost columns of every wide table with nothing to say
+they were ever there. The print rules open those boxes, turn the page landscape,
+force the light palette, keep background colours (the task map and the
+value-stream bars are meaningless without them), and repeat table headers across
+pages.
+
+Any Chromium will do. With Edge, from the repository root:
+
+    msedge.exe --headless=new --disable-gpu --no-pdf-header-footer
+      --print-to-pdf="<repo>/perpetum.io/docs/build/comparisson.pdf"
+      "file:///<repo>/perpetum.io/docs/build/comparisson.html"
+
+all on one line — the binary lives under
+`C:\Program Files (x86)\Microsoft\EdgeCore\<version>\msedge.exe`. Edge writes
+registry warnings to stderr on a headless run; they are telemetry noise, not
+failures. The PDF does not rebuild itself, so regenerate it whenever the HTML
+changes.
+
 ## What is what
 
 | file | role |
