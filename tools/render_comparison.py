@@ -3,7 +3,7 @@
 Four rounds side by side. Every number here is read off a result file; where a
 round could not measure something the cell is a dash, never a default.
 """
-import json, pathlib, statistics, html, datetime, sys, collections
+import json, math, pathlib, statistics, html, datetime, sys, collections
 
 OUT = pathlib.Path(r"D:\repos\perpetum.io\docs\build\comparisson.html")
 D = json.loads(pathlib.Path("tools/four-rounds.json").read_text(encoding="utf-8"))
@@ -107,6 +107,37 @@ def tok(x):
     if x is None or x == 0:
         return "&mdash;"
     return f"{x / 1e6:.2f}M" if x >= 1e6 else f"{x / 1e3:.0f}K"
+
+
+# The bar a task is expected to clear. Stated here rather than assumed, because
+# every capability figure below is only meaningful relative to it.
+LSL = 0.70
+
+
+def sigma_level(dpmo):
+    """Defects per million to a sigma level, on the usual 1.5-shift convention.
+
+    Bisected against the normal CDF rather than pulled from scipy, which is not
+    a dependency of this repo for one inverse.
+    """
+    if not dpmo or dpmo <= 0 or dpmo >= 1e6:
+        return None
+    p = dpmo / 1e6
+    lo, hi = -6.0, 6.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if 1 - 0.5 * (1 + math.erf(mid / math.sqrt(2))) > p:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2 + 1.5
+
+
+def pctl(xs, q):
+    if not xs:
+        return None
+    xs = sorted(xs)
+    return xs[min(int(q * len(xs)), len(xs) - 1)]
 
 
 def cls(v, lo=0.3, mid=0.7, hi=0.9):
@@ -234,6 +265,63 @@ for k in KEYS:
     S[k]["cost_completion_pt"] = (S[k]["proxy_cost"] / (S[k]["outcome"] * S[k]["scored"])
                                   if S[k]["proxy_cost"] and S[k]["outcome"] else None)
 
+    # ---- Lean and Six Sigma, on the definitions stated in the section itself.
+    # An oracle check is one pass/fail opportunity, which is the closest thing
+    # this suite has to a unit of conformance.
+    opp = S[k]["oracle_total"]
+    defects = opp - S[k]["oracle_pass"]
+    S[k]["opportunities"] = opp or None
+    S[k]["defects"] = defects if opp else None
+    S[k]["dpmo"] = (defects / opp * 1e6) if opp else None
+    S[k]["sigma"] = sigma_level(S[k]["dpmo"])
+
+    # Rolled throughput: the odds a task clears every gate without rework.
+    n = len(rs) or 1
+    S[k]["y_adapter"] = sum(1 for r in rs if r["adapter_ok"]) / n
+    S[k]["y_oracle"] = sum(1 for r in rs if isinstance(r["outcome"], (int, float))
+                           and r["outcome"] >= 0.999) / n
+    S[k]["y_rubric"] = sum(1 for r in rs if isinstance(r["process"], (int, float))
+                           and r["process"] >= 0.999) / n
+    S[k]["y_security"] = sum(1 for r in rs if r["security"] == 1.0) / n
+    S[k]["rty"] = (S[k]["y_adapter"] * S[k]["y_oracle"]
+                   * S[k]["y_rubric"] * S[k]["y_security"])
+
+    S[k]["cpk"] = ((S[k]["combined"] - LSL) / (3 * S[k]["stdev"])
+                   if S[k]["stdev"] else None)
+
+    # Process cycle efficiency: time the model spent thinking, over lead time.
+    # A figure over 100% would mean calls overlapped and the sum is not a
+    # duration -- report nothing rather than a number that cannot be true.
+    lat = [x for r in rs for x in (r.get("latencies") or [])]
+    S[k]["model_min"] = (sum(lat) / 1000 / 60) if lat else None
+    S[k]["pce"] = ((S[k]["model_min"] / S[k]["elapsed_total"])
+                   if S[k]["model_min"] and S[k]["elapsed_total"] else None)
+    if S[k]["pce"] and S[k]["pce"] > 1:
+        S[k]["pce"] = None
+    S[k]["harness_min"] = ((S[k]["elapsed_total"] - S[k]["model_min"])
+                           if S[k]["model_min"] else None)
+
+    S[k]["p75"] = pctl(el, .75)
+    S[k]["p90"] = pctl(el, .90)
+    S[k]["p95"] = pctl(el, .95)
+    S[k]["pmax"] = max(el) if el else None
+
+    # Individuals / moving-range: is the round in statistical control, or is
+    # some of its variation special-cause and worth naming task by task?
+    seq = [rows[k][t]["combined"] for t in sorted(rows[k])
+           if isinstance(rows[k][t]["combined"], (int, float))]
+    ids = [t for t in sorted(rows[k])
+           if isinstance(rows[k][t]["combined"], (int, float))]
+    mr = [abs(seq[i + 1] - seq[i]) for i in range(len(seq) - 1)]
+    mrbar = statistics.fmean(mr) if mr else 0
+    S[k]["mrbar"] = mrbar or None
+    S[k]["ucl"] = min(S[k]["combined"] + 2.66 * mrbar, 1.0)
+    S[k]["lcl"] = max(S[k]["combined"] - 2.66 * mrbar, 0.0)
+    ooc = [(ids[i], v) for i, v in enumerate(seq)
+           if v > S[k]["combined"] + 2.66 * mrbar or v < S[k]["combined"] - 2.66 * mrbar]
+    S[k]["ooc"] = len(ooc)
+    S[k]["ooc_tasks"] = ooc
+
 # common-set means
 C = {k: dict(combined=mean(vals(k, "combined", COMMON)),
              outcome=mean(vals(k, "outcome", COMMON)),
@@ -306,7 +394,7 @@ def irow(label, field, hint=None, mono=False):
 
 
 metric_rows = [
-    grp("Identity"),
+    grp("&#127991;&#65039; Identity"),
     irow("harness", "harness"),
     irow("harness version", "harness_ver",
          hint="the Opus round ran a binary from a repo path that no longer exists"),
@@ -320,7 +408,7 @@ metric_rows = [
     irow("link", "link"),
     irow("round date", "ran"),
 
-    grp("Coverage"),
+    grp("&#128203; Coverage"),
     mrow("tasks scored", "scored", lambda v: f"{v} / {TOTAL_TASKS}", True,
          hint="a task that produced no result file shrinks the denominator instead of scoring zero"),
     mrow("tasks dropped", "dropped", lambda v: num(v), False,
@@ -335,7 +423,7 @@ metric_rows = [
     mrow("runs judged", "judged", lambda v: f"{v} / {TOTAL_TASKS}", True,
          hint="tasks the rubric returned usable sub-scores for"),
 
-    grp("Outcome"),
+    grp("&#127919; Outcome"),
     mrow("combined score (mean)", "combined", lambda v: pct(v), True, strong=True,
          hint="mean of completion &times; process &times; security &mdash; the headline"),
     mrow("&middot; median task", "median", lambda v: pct(v), True,
@@ -353,7 +441,7 @@ metric_rows = [
     mrow("oracle pass rate", "oracle_rate", lambda v: pct(v, 1), True, strong=True,
          hint="checks passed as a share of checks attempted &mdash; denominator-safe"),
 
-    grp("Distribution"),
+    grp("&#128202; Distribution"),
     mrow("scored 1.0", "b_full", lambda v: num(v), True, hint="perfect"),
     mrow("scored 0.7 &ndash; 1.0", "b_high", lambda v: num(v)),
     mrow("scored 0.3 &ndash; 0.7", "b_mid", lambda v: num(v), False),
@@ -366,7 +454,7 @@ metric_rows = [
     mrow("at or above 0.9", "ge90", lambda v: num(v)),
     mrow("below 0.5", "lt50", lambda v: num(v), False),
 
-    grp("Process"),
+    grp("&#9881;&#65039; Process"),
     mrow("process score", "process", lambda v: pct(v), True, strong=True,
          hint="the rubric's verdict on how the run was conducted"),
     mrow("&middot; tool use", "tool_use", lambda v: pct(v), True,
@@ -382,7 +470,7 @@ metric_rows = [
     mrow("native rung", "rung_native", lambda v: pct(v, 0), True,
          hint="a claude-cli link cannot do native tool calls, which is where Opus's tool-use score goes"),
 
-    grp("Review"),
+    grp("&#128269; Review"),
     mrow("steps genuinely reviewed", "reviewed", lambda v: num(v), True, strong=True,
          hint="a verifier on a different link actually looked at the work"),
     mrow("review logged, then refused", "refused", lambda v: num(v), False,
@@ -394,7 +482,7 @@ metric_rows = [
          hint="closed on file-resident claims without the gate running (L-64)"),
     mrow("&middot; as a share", "no_gate_rate", lambda v: pct(v, 0), False),
 
-    grp("Work done"),
+    grp("&#128296; Work done"),
     mrow("tool calls (proxy trace)", "tool_calls", lambda v: num(v), None,
          hint="what the model actually emitted; no trace exists for a claude-cli link"),
     mrow("tool calls (journal)", "journal_calls", lambda v: num(v), None,
@@ -415,7 +503,7 @@ metric_rows = [
     mrow("priced calls / task", "calls_per_task_j", lambda v: num(v, 1), None),
     mrow("journal records", "j_records", lambda v: num(v), None),
 
-    grp("Speed"),
+    grp("&#9201;&#65039; Speed"),
     mrow("total execution", "elapsed_total", lambda v: "&mdash;" if v is None else f"{v:,.0f} min", False,
          strong=True,
          hint="agent time summed over tasks. The six-backend report prints this same sum and labels "
@@ -437,7 +525,7 @@ metric_rows = [
          hint="median latency_ms over every priced call in the journal; dsh keeps no journal"),
     mrow("mean call latency", "latency_mean_s", lambda v: "&mdash;" if v is None else f"{v:,.2f}s", False),
 
-    grp("Tokens"),
+    grp("&#129689; Tokens"),
     mrow("total tokens", "total", lambda v: tok(v), None, strong=True),
     mrow("input, excl. cache", "inp", lambda v: tok(v), False),
     mrow("served from cache", "cache_read", lambda v: tok(v), None),
@@ -452,7 +540,7 @@ metric_rows = [
     mrow("tokens per point", "tok_point", lambda v: tok(v), False, strong=True,
          hint="total tokens &divide; (mean score &times; tasks scored) &mdash; what a point of score costs"),
 
-    grp("Money"),
+    grp("&#128181; Money"),
     mrow("charged in the journal", "money", lambda v: "&mdash;" if v is None else f"${v:,.2f}", False,
          hint="what the run actually recorded being billed. A dash is deliberate: a subscription "
               "link journals no charge and a zero would be a fabrication."),
@@ -593,6 +681,23 @@ td.ml { font-weight:600; font-size:13.5px; }
 .mtbl td.ml { max-width:none; }
 /* Identity values are prose and paths, not figures: they wrap, where a number
    never should. */
+.vsrow { display:flex; align-items:center; gap:14px; margin:9px 0; }
+.vsname { width:180px; font-weight:600; font-size:13px; flex:none; }
+.vsbar { flex:1; display:flex; height:26px; border-radius:4px; overflow:hidden;
+  background:var(--line); font:600 11px/26px "Segoe UI",sans-serif; }
+.vsmodel { background:var(--accent); color:#fff; padding-left:9px; white-space:nowrap;
+  overflow:hidden; }
+.vsharness { background:var(--mid); }
+.vsnone { color:var(--muted); font-weight:400; line-height:26px; padding-left:9px; }
+.vspct { width:62px; text-align:right; font:700 14px/1 Consolas,monospace;
+  font-variant-numeric:tabular-nums; flex:none; }
+.vskey { display:flex; flex-wrap:wrap; gap:18px; font-size:12.5px; color:var(--muted);
+  margin-top:12px; }
+.vskey i { width:11px; height:11px; border-radius:3px; display:inline-block;
+  margin-right:6px; vertical-align:-1px; }
+.cumbar { display:inline-block; height:3px; width:var(--w); background:var(--sig);
+  border-radius:2px; margin-right:8px; vertical-align:middle; max-width:80px; }
+h3.sub { font:600 15px/1.3 Georgia,"Palatino Linotype",serif; margin:30px 0 10px; }
 td.why { white-space:normal; font-size:13px; color:var(--muted); line-height:1.55; }
 td.why em { color:var(--ink); font-style:normal; }
 td.id { font-family:Consolas,ui-monospace,monospace; font-size:12px; line-height:1.5;
@@ -730,6 +835,110 @@ zero_html = "".join(
     f'<tr><td class="ml">{t}<span class="mh">{lbl}</span></td>'
     f'<td class="why" colspan="4">{why}</td></tr>'
     for lbl, t, why in zeros) or '<tr><td colspan="5" class="dim">no round scored a zero</td></tr>'
+
+# Where the suite loses its points. Sorted on the total across all four rounds
+# so the table is one Pareto of the benchmark, not four stacked on each other.
+dom_loss = {k: collections.Counter() for k in KEYS}
+for k in KEYS:
+    for t, r in rows[k].items():
+        if isinstance(r.get("combined"), (int, float)):
+            dom_loss[k][r["domain"]] += 1 - r["combined"]
+tot_loss = collections.Counter()
+for k in KEYS:
+    tot_loss.update(dom_loss[k])
+grand = sum(tot_loss.values()) or 1
+pareto_rows, cum = "", 0.0
+for dom, v in tot_loss.most_common():
+    cum += v
+    pareto_rows += (
+        f'<tr><td class="ml">{dom}</td>' +
+        "".join(f'<td class="n">{dom_loss[k][dom]:.1f}</td>' for k in KEYS) +
+        f'<td class="n">{v:.1f}</td><td class="n">{v / grand * 100:.1f}%</td>'
+        f'<td class="n"><span class="cumbar" style="--w:{cum / grand * 100:.1f}%"></span>'
+        f'{cum / grand * 100:.1f}%</td></tr>')
+
+# The value stream, such as it is: two stages with a measured duration.
+pce_bars = ""
+for k in KEYS:
+    r = next(x for x in RUNS if x["key"] == k)
+    if not S[k]["pce"]:
+        pce_bars += (f'<div class="vsrow"><div class="vsname">{r["label"]}</div>'
+                     f'<div class="vsbar vsnone">no per-call latency &mdash; '
+                     f'{r["harness"]} keeps no journal to time</div></div>')
+        continue
+    m = S[k]["pce"] * 100
+    pce_bars += (
+        f'<div class="vsrow"><div class="vsname">{r["label"]}</div>'
+        f'<div class="vsbar"><span class="vsmodel" style="width:{m:.1f}%">'
+        f'{S[k]["model_min"]:,.0f} min model</span>'
+        f'<span class="vsharness" style="width:{100 - m:.1f}%"></span></div>'
+        f'<div class="vspct">{m:.1f}%</div></div>')
+
+# --- everything the statistical section interpolates
+_pce = [x["pce"] for x in S.values() if x["pce"]]
+pce_lo, pce_hi = min(_pce) * 100, max(_pce) * 100
+inv_lo, inv_hi = 100 - pce_lo, 100 - pce_hi
+_cpk = [x["cpk"] for x in S.values() if x["cpk"] is not None]
+cpk_lo, cpk_hi = min(_cpk), max(_cpk)
+steadiest = next(x["label"] for x in RUNS
+                 if S[x["key"]]["ooc"] == min(S[k]["ooc"] for k in KEYS))
+
+stat_rows = "".join([
+    grp("&#127919; Conformance"),
+    mrow("opportunities", "opportunities", lambda v: num(v), None,
+         hint="oracle checks attempted &mdash; one pass/fail opportunity each"),
+    mrow("defects", "defects", lambda v: num(v), False, hint="checks that did not pass"),
+    mrow("DPMO", "dpmo", lambda v: num(v), False, strong=True,
+         hint="defects per million opportunities"),
+    mrow("sigma level", "sigma",
+         lambda v: "&mdash;" if v is None else f"{v:.2f}&sigma;", True, strong=True,
+         hint="on the conventional 1.5-shift long-term convention. Manufacturing calls "
+              "6&sigma; the goal and 3&sigma; poor."),
+    grp("&#127981; Yield"),
+    mrow("&middot; adapter completed", "y_adapter", lambda v: pct(v, 1), True),
+    mrow("&middot; oracle perfect", "y_oracle", lambda v: pct(v, 1), True),
+    mrow("&middot; rubric perfect", "y_rubric", lambda v: pct(v, 1), True),
+    mrow("&middot; security clean", "y_security", lambda v: pct(v, 1), True),
+    mrow("rolled throughput yield", "rty", lambda v: pct(v, 1), True, strong=True,
+         hint="the four above multiplied &mdash; the odds a task clears every gate "
+              "with nothing to redo"),
+    grp("&#128207; Capability"),
+    mrow("Cpk", "cpk", lambda v: "&mdash;" if v is None else f"{v:+.3f}", True, strong=True,
+         hint=f"against a one-sided lower spec of {LSL:.2f}. Manufacturing wants 1.33; "
+              "see the caveat below."),
+    grp("&#128200; Statistical control"),
+    mrow("mean moving range", "mrbar", lambda v: pct(v, 1), False,
+         hint="the average task-to-task jump &mdash; the width of the natural variation"),
+    mrow("upper control limit", "ucl", lambda v: pct(v, 1), None),
+    mrow("lower control limit", "lcl", lambda v: pct(v, 1), None),
+    mrow("points out of control", "ooc", lambda v: num(v), False, strong=True,
+         hint="tasks outside the limits &mdash; special-cause variation, worth reading "
+              "one by one rather than averaging"),
+    grp("&#9203; Lead time"),
+    mrow("p50", "sec_median", lambda v: "&mdash;" if v is None else f"{v:,.0f}s", False),
+    mrow("p75", "p75", lambda v: "&mdash;" if v is None else f"{v:,.0f}s", False),
+    mrow("p90", "p90", lambda v: "&mdash;" if v is None else f"{v:,.0f}s", False, strong=True),
+    mrow("p95", "p95", lambda v: "&mdash;" if v is None else f"{v:,.0f}s", False),
+    mrow("longest task", "pmax", lambda v: "&mdash;" if v is None else f"{v:,.0f}s", False),
+    grp("&#9851;&#65039; Efficiency"),
+    mrow("model time", "model_min",
+         lambda v: "&mdash;" if v is None else f"{v:,.0f} min", None),
+    mrow("harness time", "harness_min",
+         lambda v: "&mdash;" if v is None else f"{v:,.0f} min", False),
+    mrow("process cycle efficiency", "pce", lambda v: pct(v, 1), None, strong=True,
+         hint="model time over lead time"),
+])
+
+ooc_rows = ""
+for k in KEYS:
+    lab = next(x["label"] for x in RUNS if x["key"] == k)
+    named = ", ".join(f"{t} ({v:.2f})" for t, v in S[k]["ooc_tasks"])
+    ooc_rows += (f'<tr><td class="ml">{lab}<span class="mh">limits '
+                 f'{S[k]["lcl"] * 100:.1f}&ndash;{S[k]["ucl"] * 100:.1f}%</span></td>'
+                 f'<td class="why" colspan="4">'
+                 f'{named or "none &mdash; every task inside the limits"}</td></tr>')
+
+pareto_head = "".join(f'<th class="bh">{r["label"]}</th>' for r in RUNS)
 
 # domains where the shared-set leader is not the overall leader
 flips = []
@@ -941,6 +1150,60 @@ HTML = f"""<title>Four harnesses, one suite</title>
     {"".join(f'<th class="bh">{r["label"]}<small>score &middot; oracle</small></th><th></th>' for r in RUNS)}
     <th class="bh">spread</th></tr></thead>
     <tbody>{task_rows()}</tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>&#128208; The statistical view</h2>
+  <p class="lede">The same rounds read as a process rather than a scoreboard. Every definition
+  here is a choice and each one is stated: a benchmark is not a production line, and borrowed
+  vocabulary is only worth anything if it says plainly what it is counting.</p>
+
+  <h3 class="sub">Value stream &mdash; where the lead time goes</h3>
+  <p class="lede" style="margin-bottom:14px">Two stages carry a measured duration: the model
+  thinking, and everything the harness does around it.</p>
+  {pce_bars}
+  <div class="vskey"><span><i style="background:var(--accent)"></i>model latency</span>
+    <span><i style="background:var(--mid)"></i>harness: tools, journalling, gating, scoring</span></div>
+  <p class="note" style="margin-top:16px"><b>This is inverted from a factory floor.</b> Process
+  cycle efficiency on a production line is typically 5&ndash;15%, and Lean goes after the waiting.
+  Here it is <b>{pce_lo:.1f}&ndash;{pce_hi:.1f}%</b>: almost the whole clock is the model
+  thinking, and the harness accounts for {inv_hi:.0f}&ndash;{inv_lo:.0f}% of it. There is no queue
+  to drain and no waste worth removing from the schedule &mdash; a faster harness cannot give back
+  time it never spent. Speed here is bought by changing the model, or how hard it is asked to
+  think, not by tuning the loop around it.</p>
+
+  <h3 class="sub">Conformance, capability and control</h3>
+  <div class="scroll mtbl">
+  <table>
+    <thead><tr><th>&nbsp;</th>{head_cells}</tr></thead>
+    <tbody>{stat_rows}</tbody>
+  </table>
+  </div>
+
+  <p class="note" style="margin-top:16px"><b>Cpk is the one number here not to lean on.</b> A
+  capability index assumes a stable, roughly normal process. These scores are bounded at 1.0 and
+  skewed left, so the index is not trustworthy as stated. Its conclusion survives the assumption
+  anyway: at {cpk_lo:+.2f} to {cpk_hi:+.2f} against a manufacturing threshold of 1.33, no round is
+  anywhere near capable of reliably clearing {LSL:.2f}, and two sit below the bar on the mean
+  alone.</p>
+  <p class="note"><b>Stable is not the same as good.</b> The fewest points outside the control
+  limits belongs to {steadiest}, which says its variation is common-cause &mdash; the process
+  behaving consistently, at whatever mean it has. Special-cause points are the ones worth opening
+  individually rather than averaging away, so they are named:</p>
+  <div class="scroll mtbl" style="margin:14px 0">
+  <table><tbody>{ooc_rows}</tbody></table>
+  </div>
+
+  <h3 class="sub">Pareto &mdash; where the points are lost</h3>
+  <p class="lede" style="margin-bottom:14px">Points forfeited (1 &minus; combined) per domain,
+  summed across all four rounds and sorted. The cumulative column is this benchmark's own 80/20.</p>
+  <div class="scroll mtbl">
+  <table>
+    <thead><tr><th>domain</th>{pareto_head}
+      <th class="bh">total</th><th class="bh">share</th><th class="bh">cumulative</th></tr></thead>
+    <tbody>{pareto_rows}</tbody>
   </table>
   </div>
 </section>

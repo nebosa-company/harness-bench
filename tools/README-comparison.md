@@ -88,6 +88,31 @@ numbers in a sentence stay right; the *claim* around them does not. If a
 re-run reverses the standings, sentences like "dsh leads the suite" need editing
 by hand.
 
+## The statistical section
+
+A Lean / Six Sigma reading of the same rounds, all of it derived — nothing new is
+collected for it. Definitions, because each one is a choice:
+
+- **DPMO / sigma level** — an oracle check is one pass/fail opportunity, which is
+  the closest thing the suite has to a unit of conformance. Sigma uses the usual
+  1.5-shift convention.
+- **Rolled throughput yield** — adapter completed x oracle perfect x rubric
+  perfect x security clean. The odds a task clears every gate with nothing to redo.
+- **Cpk** — against a one-sided lower spec of 0.70, set in `LSL`. See the caveat
+  in the report: the index assumes a roughly normal process and these scores are
+  bounded and left-skewed, so only its conclusion is safe, not its value.
+- **I-MR control limits** — mean +/- 2.66 x mean moving range, over tasks in id
+  order. Points outside are named in the report rather than averaged away.
+- **Process cycle efficiency** — summed per-call latency over lead time. Reads
+  92-96%, which is inverted from a factory floor: nearly all the clock is the
+  model thinking and the harness is 4-8% of it. Suppressed if it computes above
+  100%, which would mean calls overlapped and the sum is not a duration.
+- **Pareto** — points forfeited (1 - combined) per domain, summed across all four
+  rounds, sorted, with a cumulative column.
+
+`dsh` is a dash on everything latency-derived, PCE included: it keeps no journal
+and the proxy log carries no timestamps.
+
 ## Two metrics that are not what they look like
 
 **Failing tool results is a heuristic.** Neither harness flags a failed call. dsh
