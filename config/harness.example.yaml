@@ -181,6 +181,86 @@
       "map_budget": 0
     },
 
+    # The entry above, with the two changes the note on it describes: a second
+    # link so review is not self-review, and a `result_slug` so the round has
+    # somewhere to file its results. Everything else is identical, which is the
+    # point -- it is the smallest config that actually reviews anything.
+    #
+    # It also carries `effort` on an OpenAI-shaped link. That is `M-47`: before
+    # it, `link.effort` was validated for every kind and consumed only on the
+    # `claude-cli` path, so a `deepseek` or `grok` link parsed it, accepted it,
+    # and sent nothing. Measured across two rounds, all 1,231 DeepSeek and 1,113
+    # Grok request bodies went out as `{model, stream, tool_choice}`.
+    "perpetum-deepseek-reviewed": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-reviewed",
+      "timeout_sec": 1800,
+      "links": {
+        "deepseek": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-flash",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "effort": "high",
+          "price": { "cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28 }
+        },
+        "ds-pro": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-pro",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87 }
+        }
+      },
+      "roles": {
+        "coder": "deepseek", "chat": "deepseek",
+        "verifier": "ds-pro", "mutator": "ds-pro"
+      },
+      "result_slug": "deepseek-v4-flash",
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
+    # The same shape with the coder at another vendor, which is the stronger
+    # form of `V-5`'s independence: a different lab reading the work rather than
+    # a larger model from the same one.
+    #
+    # `first_token_seconds` is raised because Grok reasons before emitting a
+    # first token, and `M-23`'s default of 20 read that silence as a dead link.
+    # In a single-link chain there was nowhere to fail over to, so the task
+    # blocked and scored zero -- one round's only zero, diagnosed from a journal
+    # note reading "said nothing for 20s".
+    "perpetum-grok": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-grok",
+      "timeout_sec": 1800,
+      "links": {
+        "grok": {
+          "kind": "grok",
+          "model": "grok-4.6",
+          "auth_env": "XAI_API_KEY",
+          "first_token_seconds": 90,
+          "effort": "high",
+          "price": { "cache_hit": 0.5, "cache_miss": 2.0, "output": 6.0 }
+        },
+        "ds-pro": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-pro",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87 }
+        }
+      },
+      "roles": {
+        "coder": "grok", "chat": "grok",
+        "verifier": "ds-pro", "mutator": "ds-pro"
+      },
+      "result_slug": "grok-4.6",
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
     # DeepSeek's larger model. Prices are the regular (off-peak) rates effective
     # 2026-07-31, corroborated by two independent sources; the same check
     # returned this config's existing v4-flash figures unchanged, which is why
