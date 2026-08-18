@@ -149,6 +149,11 @@ def extract_claude_code_session(session_path: Path) -> dict[str, Any]:
         rounds.append({
             "response_file": rec.get("uuid") or "",
             "provider": "anthropic",
+            # The transcript names the model on every assistant message. Carried
+            # through because it is what prices the round and what names the
+            # results directory -- without it a run lands under `unknown-api/`
+            # and its cost reads `no price on file for ''`.
+            "model": str(msg.get("model") or "").strip(),
             "agent": agent,
             "new_messages": [],
             "assistant_text": text,

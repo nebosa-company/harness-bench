@@ -527,6 +527,11 @@ def _collect_proxy_usage_summary(log_file: Path, session_id: str) -> dict[str, A
 # used -- a number whose basis is unrecorded is the thing this replaces.
 DEFAULT_PRICES = {
     "opus": (0.50, 5.00, 25.00),
+    # The table matches exactly, and a Claude Code transcript names the model in
+    # full, so the bare "opus" key never fired for it. List price, which for a
+    # round running on a subscription seat is an imputed API-equivalent rather
+    # than money spent -- see `cost_is_imputed` below.
+    "claude-opus-5": (0.50, 5.00, 25.00),
     "sonnet": (0.30, 3.00, 15.00),
     "deepseek-v4-pro": (0.003625, 0.435, 0.87),
     "deepseek-v4-flash": (0.0028, 0.14, 0.28),
@@ -571,7 +576,8 @@ def price_usage(summary: dict[str, Any], model_label: str, model_cfg: dict[str, 
          + tokens("output_tokens") * out) / 1_000_000.0,
         6,
     )
-    summary["cost_basis"] = f"{basis}: {model_label} @ {cache_read}/{inp}/{out} per MTok"
+    prefix = "imputed (subscription seat, nothing metered) " if summary.get("cost_is_imputed") else ""
+    summary["cost_basis"] = f"{prefix}{basis}: {model_label} @ {cache_read}/{inp}/{out} per MTok"
 
 
 def write_setup_failure(
@@ -717,6 +723,43 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
 
     assert adapter_result is not None
     usage_summary = _collect_proxy_usage_summary(proxy_log, session_id)
+    if not usage_summary.get("available"):
+        # The proxy saw nothing, which for Claude Code is expected rather than a
+        # fault: it authenticates a subscription, so it is a subprocess and not
+        # an address. Its transcript carries the usage, and the extractor has
+        # already totalled it -- read that instead of reporting a round with no
+        # tokens and no cost, which is the dash that makes `perpetum-opus`
+        # uncomparable on money.
+        cc_rounds, cc_totals = [], {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        for cc_path in claude_code_sessions_for_workspace(workspace):
+            part = extract_claude_code_session(cc_path)
+            if part.get("error"):
+                continue
+            cc_rounds.extend(part.get("rounds") or [])
+            for k in cc_totals:
+                cc_totals[k] += (part.get("totals") or {}).get(k, 0)
+        if cc_rounds:
+            cache_r = sum((r.get("usage") or {}).get("cache_read_tokens", 0) for r in cc_rounds)
+            cache_w = sum((r.get("usage") or {}).get("cache_write_tokens", 0) for r in cc_rounds)
+            usage_summary = {
+                "available": True,
+                "source": "claude_code_session",
+                "session_id": session_id,
+                "request_count": len(cc_rounds),
+                "input_tokens": cc_totals["input_tokens"],
+                "output_tokens": cc_totals["output_tokens"],
+                "cache_read_tokens": cache_r,
+                "cache_write_tokens": cache_w,
+                "total_tokens": cc_totals["total_tokens"],
+                "providers": ["anthropic"],
+                "models": sorted({m for m in (str(r.get("model") or "").strip()
+                                              for r in cc_rounds) if m}),
+                # This round authenticates a subscription, so no metered spend
+                # occurred. The priced figure is what the same tokens would have
+                # cost on the API -- useful for comparing against metered rounds,
+                # wrong to report as an amount billed.
+                "cost_is_imputed": True,
+            }
     if not usage_summary.get("available"):
         usage_summary = _collect_usage_summary(adapter_result, session_id)
     oracle_result = run_oracle(task, workspace)
