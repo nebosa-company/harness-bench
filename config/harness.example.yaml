@@ -151,6 +151,19 @@
       #     "coder": "deepseek", "chat": "deepseek",
       #     "verifier": "ds-pro", "mutator": "ds-pro"
       #   },
+      #   "result_slug": "deepseek-v4-flash",
+      #
+      # `result_slug` is not optional once you do that, and it is the half that
+      # is easy to miss. Results are filed under
+      # `results/<entry>/<api-model>/`, and with more than one link there is no
+      # single "the" model -- `_resolve_api_slug` falls through to whichever
+      # model answered *last* in the proxy log, which for a round with its own
+      # verifier is usually the verifier. Both rounds that added a second link
+      # lost their directory to this: `perpetum-grok` filed all 106 tasks under
+      # `unknown-api/`, and a reviewed DeepSeek round split 16/1 across
+      # `deepseek-v4-pro/` and `deepseek-v4-flash/`. Nothing errors -- a
+      # collector reading one of them just sees part of a round. Name it for
+      # the coder: that is what is under test, the verifier is scaffolding.
       #
       # Declare `mutator` while you are there. Without one `perp observe`
       # refuses with "role.mutator: has no chain" and the mutator collects

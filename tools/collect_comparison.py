@@ -24,7 +24,7 @@ BASE = pathlib.Path(r"D:\repos\harness-bench\data_try6\results")
 OUT = pathlib.Path("tools/four-rounds.json")
 
 RUNS = [
-    dict(key="grok",   label="Perpetum+Grok",  rel="perpetum-grok/unknown-api",
+    dict(key="grok",   label="Perpetum+Grok",  rel="perpetum-grok/grok-4.6",
          harness="perpetum", model="grok", link="api",        regraded=False, price=None),
     dict(key="pflash", label="Perpetum+Flash", rel="perpetum-deepseek/deepseek-v4-flash",
          harness="perpetum", model="deepseek-v4-flash", link="api", regraded=False,
