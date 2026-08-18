@@ -129,6 +129,33 @@
           "price": { "cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28 }
         }
       },
+      # NOTE: coder and verifier on one link means **nothing is ever reviewed**.
+      # `V-5` refuses a review where the reviewer is the author, which is right,
+      # but the round then closes every step on the coder's own claim. Measured
+      # across four HarnessBench rounds: Grok and Flash closed 106 and 103 steps
+      # with no gate running at all (`L-64`), and Opus reached the review stage
+      # 114 times and was refused every one -- *"claude would be reviewing its
+      # own work."* Every process score from those rounds measures unreviewed
+      # work. This entry is left single-link because it is the smallest thing
+      # that runs, and because splitting it silently would make the cheapest
+      # config quietly cost twice as much.
+      #
+      # To actually review, name a second link and point `verifier` at it. It
+      # need not be a bigger model -- it must not be the author:
+      #
+      #   "links": {
+      #     "deepseek": { "kind": "deepseek", "model": "deepseek-v4-flash", ... },
+      #     "ds-pro":   { "kind": "deepseek", "model": "deepseek-v4-pro",   ... }
+      #   },
+      #   "roles": {
+      #     "coder": "deepseek", "chat": "deepseek",
+      #     "verifier": "ds-pro", "mutator": "ds-pro"
+      #   },
+      #
+      # Declare `mutator` while you are there. Without one `perp observe`
+      # refuses with "role.mutator: has no chain" and the mutator collects
+      # nothing for the entire suite -- which happened to two rounds on file
+      # before anyone noticed.
       "roles": { "coder": "deepseek", "chat": "deepseek", "verifier": "deepseek" },
       # On, because `usage-proxy/responses/` is what the process rubric reads.
       # The adapter marks its routes `stream`, so the proxy relays tokens as
