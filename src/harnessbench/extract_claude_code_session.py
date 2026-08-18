@@ -29,6 +29,19 @@ def _blocks(content: Any) -> list[dict[str, Any]]:
     return [b for b in (content or []) if isinstance(b, dict)]
 
 
+def uuid_for_session(session_id: str) -> str:
+    """The transcript name for a bench session id.
+
+    Claude Code rejects a non-UUID `--session-id` outright, so the launcher
+    passes a UUID5 derived from the bench id rather than the id itself. Deriving
+    it -- here and there, from the same namespace and the same string -- rather
+    than minting a random one is what lets the scorer find the transcript later
+    with nothing having been recorded in between.
+    """
+    import uuid
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "harnessbench://" + session_id))
+
+
 def session_file(session_id: str, workspace: str | os.PathLike[str] | None = None,
                  root: Path | None = None) -> Path | None:
     """Find the transcript for a session id.
@@ -43,6 +56,33 @@ def session_file(session_id: str, workspace: str | os.PathLike[str] | None = Non
         return None
     hit = sorted(root.glob(f"*/{session_id}.jsonl"))
     return hit[0] if hit else None
+
+
+def session_file_for_workspace(workspace: Path, root: Path | None = None) -> Path | None:
+    """Find a transcript from the workspace it ran in.
+
+    Claude Code names each project directory after the working directory, with
+    the separators beaten into dashes. Rather than reproduce that encoding --
+    which is Claude Code's to change -- this matches on the sandbox's own leaf
+    name, which is unique per task run and appears verbatim inside it. The
+    newest transcript in the matching directory wins, so a re-run of the same
+    task is read rather than its predecessor.
+    """
+    root = root or (Path.home() / ".claude" / "projects")
+    if not root.is_dir():
+        return None
+    leaf = Path(workspace).name
+    stem = Path(workspace).parent.name if leaf == "workspace" else leaf
+    if not stem:
+        return None
+    best: Path | None = None
+    for d in root.iterdir():
+        if not d.is_dir() or stem not in d.name:
+            continue
+        for f in d.glob("*.jsonl"):
+            if best is None or f.stat().st_mtime > best.stat().st_mtime:
+                best = f
+    return best
 
 
 def extract_claude_code_session(session_path: Path) -> dict[str, Any]:

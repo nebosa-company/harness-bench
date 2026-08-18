@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from harnessbench.extract_proxy_trace import extract_proxy_trace, extract_proxy_trace_incremental
+from harnessbench.extract_claude_code_session import (
+    extract_claude_code_session,
+    session_file as claude_code_session_file,
+    uuid_for_session,
+)
 from harnessbench.grading.process_grade import compute_scoring
 from harnessbench.models import AdapterRunContext, AppConfig, TaskRunResult, TaskSpec
 from harnessbench.registry import build_adapter
@@ -754,6 +759,21 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
     result_dir.mkdir(parents=True, exist_ok=True)
     out_file = result_dir / f"{task.task_id}.json"
     trace_for_stdout = extract_proxy_trace_incremental(proxy_dir)
+    if trace_for_stdout.get("error"):
+        # No wire trace. For a harness that cannot be put behind the proxy --
+        # Claude Code authenticates a subscription, so it is a subprocess rather
+        # than an address -- that is not the end of the story: it writes a full
+        # transcript of every turn and tool call, including the tool results the
+        # wire never carries. Score from that instead of recording nothing.
+        #
+        # The transcript is named by a UUID5 of the bench session id, derived
+        # identically here and in the launcher, so it is found without anything
+        # having been written down in between.
+        cc_path = claude_code_session_file(uuid_for_session(session_id))
+        if cc_path is not None:
+            cc_trace = extract_claude_code_session(cc_path)
+            if not cc_trace.get("error"):
+                trace_for_stdout = cc_trace
     adapter_stdout_saved = json.dumps(trace_for_stdout, ensure_ascii=False, indent=2)
 
     if hooks and callable(getattr(hooks, "cleanup_runtime", None)):
