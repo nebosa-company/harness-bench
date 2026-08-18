@@ -29,7 +29,7 @@ def _blocks(content: Any) -> list[dict[str, Any]]:
     return [b for b in (content or []) if isinstance(b, dict)]
 
 
-def uuid_for_session(session_id: str) -> str:
+def uuid_for_session(session_id: str, round_index: int = 1) -> str:
     """The transcript name for a bench session id.
 
     Claude Code rejects a non-UUID `--session-id` outright, so the launcher
@@ -39,7 +39,8 @@ def uuid_for_session(session_id: str) -> str:
     with nothing having been recorded in between.
     """
     import uuid
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, "harnessbench://" + session_id))
+    name = "harnessbench://" + session_id + "#" + str(round_index)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, name))
 
 
 def session_file(session_id: str, workspace: str | os.PathLike[str] | None = None,
@@ -58,7 +59,7 @@ def session_file(session_id: str, workspace: str | os.PathLike[str] | None = Non
     return hit[0] if hit else None
 
 
-def session_file_for_workspace(workspace: Path, root: Path | None = None) -> Path | None:
+def session_file_for_workspace(workspace: Path, root: Path | None = None) -> list[Path]:
     """Find a transcript from the workspace it ran in.
 
     Claude Code names each project directory after the working directory, with
@@ -75,14 +76,16 @@ def session_file_for_workspace(workspace: Path, root: Path | None = None) -> Pat
     stem = Path(workspace).parent.name if leaf == "workspace" else leaf
     if not stem:
         return None
-    best: Path | None = None
+    found: list[Path] = []
     for d in root.iterdir():
         if not d.is_dir() or stem not in d.name:
             continue
-        for f in d.glob("*.jsonl"):
-            if best is None or f.stat().st_mtime > best.stat().st_mtime:
-                best = f
-    return best
+        found.extend(d.glob("*.jsonl"))
+    # Oldest first: a multi-round task writes one transcript per round into the
+    # same directory, and the rubric reads them as one run in the order they
+    # happened. Returning only the newest scored the last round of a five-round
+    # task as though it were the whole thing.
+    return sorted(found, key=lambda f: f.stat().st_mtime)
 
 
 def extract_claude_code_session(session_path: Path) -> dict[str, Any]:

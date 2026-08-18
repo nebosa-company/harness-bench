@@ -12,8 +12,7 @@ from typing import Any
 from harnessbench.extract_proxy_trace import extract_proxy_trace, extract_proxy_trace_incremental
 from harnessbench.extract_claude_code_session import (
     extract_claude_code_session,
-    session_file as claude_code_session_file,
-    uuid_for_session,
+    session_file_for_workspace as claude_code_sessions_for_workspace,
 )
 from harnessbench.grading.process_grade import compute_scoring
 from harnessbench.models import AdapterRunContext, AppConfig, TaskRunResult, TaskSpec
@@ -769,11 +768,18 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
         # The transcript is named by a UUID5 of the bench session id, derived
         # identically here and in the launcher, so it is found without anything
         # having been written down in between.
-        cc_path = claude_code_session_file(uuid_for_session(session_id))
-        if cc_path is not None:
+        # By workspace, not by session id: a multi-round task writes one
+        # transcript per round, and the id-based lookup would find only the
+        # first. The scorer merges the same list, so both read the same run.
+        for cc_path in claude_code_sessions_for_workspace(workspace):
             cc_trace = extract_claude_code_session(cc_path)
-            if not cc_trace.get("error"):
+            if cc_trace.get("error") or not cc_trace.get("rounds"):
+                continue
+            if trace_for_stdout.get("error"):
                 trace_for_stdout = cc_trace
+            else:
+                trace_for_stdout["rounds"].extend(cc_trace["rounds"])
+                trace_for_stdout["unified_transcript"].extend(cc_trace["unified_transcript"])
     adapter_stdout_saved = json.dumps(trace_for_stdout, ensure_ascii=False, indent=2)
 
     if hooks and callable(getattr(hooks, "cleanup_runtime", None)):

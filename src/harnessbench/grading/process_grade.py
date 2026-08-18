@@ -240,11 +240,22 @@ def compute_scoring(
                 extract_claude_code_session,
                 session_file_for_workspace,
             )
-            cc_path = session_file_for_workspace(sandbox / "workspace")
-            if cc_path is not None:
-                cc_trace = extract_claude_code_session(cc_path)
-                if not cc_trace.get("error") and cc_trace.get("rounds"):
-                    trace, trace_error = cc_trace, None
+            merged = None
+            for cc_path in session_file_for_workspace(sandbox / "workspace"):
+                part = extract_claude_code_session(cc_path)
+                if part.get("error") or not part.get("rounds"):
+                    continue
+                if merged is None:
+                    merged = part
+                    continue
+                # A multi-round task is one run split across transcripts; the
+                # rubric judges the run, so they are joined rather than ranked.
+                merged["rounds"].extend(part["rounds"])
+                merged["unified_transcript"].extend(part["unified_transcript"])
+                for k, v in part["totals"].items():
+                    merged["totals"][k] = merged["totals"].get(k, 0) + v
+            if merged is not None:
+                trace, trace_error = merged, None
         except Exception:
             pass  # a missing or malformed transcript leaves the wire verdict alone
 
