@@ -1,0 +1,84 @@
+{
+  "journals": 107,
+  "kinds": {
+    "rule": 31
+  },
+  "perp_version": [
+    "0.4.0"
+  ],
+  "round": "perpetum-deepseek-thinking",
+  "tools": {
+    "apply": {
+      "attempts": 6,
+      "ok": 5,
+      "rate": 0.1667,
+      "refused": 1
+    },
+    "fetch": {
+      "attempts": 9,
+      "ok": 6,
+      "rate": 0.3333,
+      "refused": 3
+    },
+    "git": {
+      "attempts": 101,
+      "ok": 94,
+      "rate": 0.0693,
+      "refused": 7
+    },
+    "glob": {
+      "attempts": 406,
+      "ok": 406,
+      "rate": 0.0,
+      "refused": 0
+    },
+    "grep": {
+      "attempts": 22,
+      "ok": 22,
+      "rate": 0.0,
+      "refused": 0
+    },
+    "note": {
+      "attempts": 23,
+      "ok": 23,
+      "rate": 0.0,
+      "refused": 0
+    },
+    "patch": {
+      "attempts": 25,
+      "ok": 25,
+      "rate": 0.0,
+      "refused": 0
+    },
+    "plan": {
+      "attempts": 81,
+      "ok": 81,
+      "rate": 0.0,
+      "refused": 0
+    },
+    "read": {
+      "attempts": 925,
+      "ok": 913,
+      "rate": 0.013,
+      "refused": 12
+    },
+    "sandbox_run": {
+      "attempts": 2,
+      "ok": 0,
+      "rate": 1.0,
+      "refused": 2
+    },
+    "shell": {
+      "attempts": 285,
+      "ok": 279,
+      "rate": 0.0211,
+      "refused": 6
+    },
+    "write": {
+      "attempts": 264,
+      "ok": 264,
+      "rate": 0.0,
+      "refused": 0
+    }
+  }
+}
