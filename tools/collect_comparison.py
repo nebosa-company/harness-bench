@@ -26,7 +26,16 @@ OUT = pathlib.Path("tools/four-rounds.json")
 RUNS = [
     dict(key="grok",   label="Perpetum+Grok",  rel="perpetum-grok/grok-4.6",
          harness="perpetum", model="grok", link="api",        regraded=False, price=None),
-    dict(key="pflash", label="Perpetum+Flash", rel="perpetum-deepseek/deepseek-v4-flash",
+    dict(key="pflash", label="Perpetum+Flash", rel="perpetum-deepseek-reviewed/deepseek-v4-flash",
+         harness="perpetum", model="deepseek-v4-flash", link="api", regraded=False,
+         price="deepseek-v4-flash"),
+    # Collected but never rendered as a column: the round `pflash` used to be,
+    # kept so every cell in that column can show how far it moved. The renderer
+    # reads it through DELTA_OF and leaves it out of KEYS, so nothing else in
+    # the report -- best/worst marking, the shared-task set, the frontier --
+    # sees a fifth round.
+    dict(key="pflash_old", label="Perpetum+Flash (superseded)",
+         rel="perpetum-deepseek/deepseek-v4-flash",
          harness="perpetum", model="deepseek-v4-flash", link="api", regraded=False,
          price="deepseek-v4-flash"),
     dict(key="dsh",    label="dsh+Flash",      rel="dsh-deepseek-flash/deepseek-v4-flash",

@@ -608,7 +608,20 @@ def write_setup_failure(
     collector that averages over scored rows is unaffected; one that counts rows
     now sees the task, and nothing can silently shrink a round again.
     """
-    api_slug = _api_slug_from_model_label(str(model_cfg.get("model") or model_id))
+    # `result_slug` first, the same order `_resolve_api_slug` uses for a scored
+    # row. Without it this fell through to `model_id` -- the *harness entry name*
+    # -- for any config with no top-level `model`, which is every multi-link one:
+    # a reviewed round filed its four setup failures under
+    # `results/perpetum-deepseek-reviewed/perpetum-deepseek-reviewed/` while its
+    # 102 scored rows sat in `deepseek-v4-flash/`. The row existed and no
+    # collector could see it, so the round shrank from 106 to 102 anyway --
+    # exactly the hole this function was written to close, one directory over.
+    declared = str(model_cfg.get("result_slug") or "").strip()
+    api_slug = (
+        _sanitize_api_dir_segment(declared)
+        if declared
+        else _api_slug_from_model_label(str(model_cfg.get("model") or model_id))
+    )
     result_dir = app.results_dir / model_id / api_slug
     result_dir.mkdir(parents=True, exist_ok=True)
     out_file = result_dir / f"{task.task_id}.json"

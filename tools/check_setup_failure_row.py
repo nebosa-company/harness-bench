@@ -76,6 +76,39 @@ with tempfile.TemporaryDirectory() as tmp:
         "a .partial was left in the results directory",
     )
 
+    # And it lands where a scored row would.
+    #
+    # This is the half that was missing, and the row above is why it was missed:
+    # its config carries a top-level `model`, which is the case that works. A
+    # multi-link config has none -- the models live inside `links` -- so the slug
+    # fell through to `model_id`, the *harness entry name*. A reviewed round put
+    # its four setup failures in
+    # `results/perpetum-deepseek-reviewed/perpetum-deepseek-reviewed/` while its
+    # 102 scored rows sat in `deepseek-v4-flash/`. Every assertion above passed
+    # on that row. The round still shrank from 106 to 102, because a row a
+    # collector cannot find is the hole this function exists to close.
+    task2 = TaskSpec(task_id="042-api-schema-migration", title="a multi-link round's setup failure")
+    multi = {
+        "adapter": "perpetum",
+        "result_slug": "deepseek-v4-flash",
+        "links": {"deepseek": {"model": "deepseek-v4-flash"}, "ds-pro": {"model": "deepseek-v4-pro"}},
+    }
+    try:
+        raise FileNotFoundError("cloudflared: not found on PATH")
+    except FileNotFoundError as exc:
+        out2 = write_setup_failure(
+            app, task2, "perpetum-deepseek-reviewed", multi, "live", exc, traceback.format_exc()
+        )
+
+    check(
+        out2.parent.name == "deepseek-v4-flash",
+        f"a multi-link setup failure landed in {out2.parent.name!r}, not its result_slug",
+    )
+    check(
+        out2.parent.name != "perpetum-deepseek-reviewed",
+        "the row is filed under the harness id, where no collector reads",
+    )
+
 if failures:
     print("FAILED")
     for line in failures:

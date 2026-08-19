@@ -3,7 +3,7 @@
 Four rounds side by side. Every number here is read off a result file; where a
 round could not measure something the cell is a dash, never a default.
 """
-import json, math, pathlib, statistics, html, datetime, sys, collections
+import json, math, os, pathlib, statistics, html, datetime, sys, collections
 
 OUT = pathlib.Path(r"D:\repos\perpetum.io\docs\build\comparisson.html")
 D = json.loads(pathlib.Path("tools/four-rounds.json").read_text(encoding="utf-8"))
@@ -14,13 +14,19 @@ D = json.loads(pathlib.Path("tools/four-rounds.json").read_text(encoding="utf-8"
 # keeps no journal to charge against.
 PRICES = {"opus": (0.50, 5.00, 25.00), "deepseek-v4-flash": (0.0028, 0.14, 0.28)}
 PRICE_OF = {"grok": None, "pflash": "deepseek-v4-flash",
-            "dsh": "deepseek-v4-flash", "opus": "opus"}
+            "dsh": "deepseek-v4-flash", "opus": "opus",
+            # The shadow run priced like the column it is a delta against, or a
+            # cost delta would compare a priced round to an unpriced one.
+            "pflash_old": "deepseek-v4-flash"}
 
 RUNS = [
     dict(key="grok",   label="Perpetum+Grok",  harness="perpetum", model="grok (xAI)",
          link="api", note="Perpetum 0.4.0 driving Grok over the metered API."),
     dict(key="pflash", label="Perpetum+Flash", harness="perpetum", model="deepseek-v4-flash",
-         link="api", note="Perpetum 0.4.0 driving DeepSeek Flash. Same model as the next column."),
+         link="api", note="Perpetum 0.4.0 driving DeepSeek Flash at high effort, reviewed by "
+              "DeepSeek v4 Pro. The coder is the same model as the next column; the "
+              "verifier is not, and it is the first round here where review actually ran "
+              "&mdash; every earlier round had `V-5` refuse it as self-review."),
     dict(key="dsh",    label="dsh+Flash",      harness="dsh", model="deepseek-v4-flash",
          link="api", note="DeepSeek's own harness on the same model &mdash; but with thinking enabled at high effort, which Perpetum never sent."),
     dict(key="opus",   label="Perpetum+Opus",  harness="perpetum", model="opus (claude-cli)",
@@ -45,9 +51,11 @@ IDENTITY = {
     "pflash": dict(
         harness="Perpetum", harness_ver="perp 0.4.0",
         model_cfg="deepseek-v4-flash", wire_model="deepseek-v4-flash",
-        thinking="none sent", effort="not set",
-        wire_note="{model, stream, tool_choice}<span class=\"sub\">every one of 1,231 calls</span>",
-        link="deepseek<span class=\"sub\">metered</span>", ran="2026-08-16"),
+        thinking="enabled", effort="high",
+        wire_note="{model, reasoning_effort, thinking, tools, tool_choice, stream}"
+                  "<span class=\"sub\">1,276 of 1,386 captured bodies; the other 110 are the "
+                  "ds-pro verifier, which declares no effort</span>",
+        link="deepseek<span class=\"sub\">metered</span>", ran="2026-08-19"),
     "dsh": dict(
         harness="DeepSeek Harness", harness_ver="dsh-v0.1.0-rc.7",
         model_cfg="deepseek-v4-flash", wire_model="deepseek-v4-flash",
@@ -65,9 +73,39 @@ IDENTITY = {
 KEYS = [r["key"] for r in RUNS]
 TOTAL_TASKS = 106
 
-rows = {k: {} for k in KEYS}
+# A column that reports how far it moved, and the run it moved from. The prior
+# run is loaded and summarised exactly like a rendered one but stays out of
+# KEYS, so best/worst marking, the shared-task set and the frontier all still
+# see four rounds.
+#
+# Deltas are paired: the prior run's summary is computed over only the tasks
+# *both* rounds scored. Without that, a sum like total tokens would diff 101
+# tasks against 106 and read as an efficiency gain that is really five missing
+# rows.
+DELTA_OF = {"pflash": "pflash_old"}
+
+
+def _window(k):
+    """(day, hours) spanned by a round's result files, for provenance prose.
+
+    Written because the paragraph this feeds was hardcoded -- "105 of its 106
+    tasks ran on 16 Aug within a 4.1-hour window" -- and survived the column
+    being repointed at a different round, describing a round the report no
+    longer showed.
+    """
+    import datetime
+    ts = sorted(r["mtime"] for r in rows[k].values() if r.get("mtime"))
+    if not ts:
+        return "&mdash;", None
+    lo, hi = datetime.datetime.fromtimestamp(ts[0]), datetime.datetime.fromtimestamp(ts[-1])
+    day = lo.strftime("%-d %b") if os.name != "nt" else lo.strftime("%d %b").lstrip("0")
+    return day, (ts[-1] - ts[0]) / 3600.0
+SHADOW = [v for v in DELTA_OF.values()]
+
+rows = {k: {} for k in KEYS + SHADOW}
 for r in D["rows"]:
-    rows[r["run"]][r["task"]] = r
+    if r["run"] in rows:
+        rows[r["run"]][r["task"]] = r
 
 ALL_TASKS = sorted({t for k in KEYS for t in rows[k]}, key=lambda t: int(t[:3]))
 COMMON = [t for t in ALL_TASKS
@@ -76,17 +114,23 @@ COMMON = [t for t in ALL_TASKS
 # A round still in flight has not "dropped" the tasks it has not reached yet.
 # The frontier separates the two, so an unfinished round is not charged for
 # work it was never given the chance to do.
-FRONTIER = {k: (max(int(t[:3]) for t in rows[k]) if rows[k] else 0) for k in KEYS}
+FRONTIER = {k: (max(int(t[:3]) for t in rows[k]) if rows[k] else 0) for k in KEYS + SHADOW}
 DROPPED = {k: [t for t in ALL_TASKS
-               if t not in rows[k] and int(t[:3]) <= FRONTIER[k]] for k in KEYS}
+               if t not in rows[k] and int(t[:3]) <= FRONTIER[k]] for k in KEYS + SHADOW}
 PENDING = {k: [t for t in ALL_TASKS
-               if t not in rows[k] and int(t[:3]) > FRONTIER[k]] for k in KEYS}
+               if t not in rows[k] and int(t[:3]) > FRONTIER[k]] for k in KEYS + SHADOW}
 
 
 # ---------------------------------------------------------------- helpers
 def vals(k, field, tasks=None):
-    src = tasks if tasks is not None else rows[k].keys()
-    return [rows[k][t][field] for t in src
+    # A shadow run answers over its paired task set unless asked otherwise, so
+    # every mean derived from it is like-for-like with the column it is a delta
+    # against. Patched here rather than at each call site: the summary block
+    # below calls this a dozen times and one missed call would silently mix
+    # denominators.
+    if tasks is None:
+        tasks = SHADOW_TASKS.get(k) or rows[k].keys()
+    return [rows[k][t][field] for t in tasks
             if t in rows[k] and isinstance(rows[k][t].get(field), (int, float))]
 
 
@@ -151,8 +195,19 @@ def cls(v, lo=0.3, mid=0.7, hi=0.9):
 
 # ---------------------------------------------------------------- per-run rollup
 S = {}
-for k in KEYS:
-    rs = list(rows[k].values())
+# The paired task set per delta column: the tasks *both* rounds scored. The
+# shadow run is summarised over this rather than over its own full round --
+# otherwise a sum like total tokens diffs 101 tasks against 106 and reads as an
+# efficiency gain that is really five missing rows.
+PAIRED = {new: sorted(t for t in rows[new]
+                      if isinstance((rows[new].get(t) or {}).get('combined'), (int, float))
+                      and isinstance((rows[prev].get(t) or {}).get('combined'), (int, float)))
+          for new, prev in DELTA_OF.items()}
+SHADOW_TASKS = {prev: PAIRED[new] for new, prev in DELTA_OF.items()}
+
+for k in KEYS + SHADOW:
+    only = SHADOW_TASKS.get(k)
+    rs = [r for t, r in rows[k].items() if only is None or t in only]
     comb = vals(k, "combined")
     el = vals(k, "elapsed")
     proc = vals(k, "process")
@@ -359,7 +414,17 @@ def title_of(t):
 
 # ---------------------------------------------------------------- metric table
 def mark(key, values, higher_better=True):
-    """Green best, red worst, across the four cells of one row."""
+    """Green best, red worst, across the four cells of one row.
+
+    `higher_better=None` means the row has no better or worse and is left
+    unmarked. Two rows pass it deliberately -- "not yet run", whose own hint
+    says *not a failure*, and "oracle checks passed", a raw count whose
+    denominator moves with how many tasks a round reached. Before this, `None`
+    was merely falsy, so both were marked as though *fewer was better*: the
+    round that had run the fewest tasks was coloured green for it.
+    """
+    if higher_better is None:
+        return ""
     got = [(k, v) for k, v in values.items() if v is not None]
     if len(got) < 2:
         return ""
@@ -373,13 +438,50 @@ def mark(key, values, higher_better=True):
     return ""
 
 
+def delta(k, field, fmt, value, src=None, higher=True):
+    """`fmt(value)` and, for a delta column, how far it moved.
+
+    The signed part is formatted with the same `fmt` as the value, so a
+    percentage row reads `68.65% (+2.71%)` and a token row `2.15M (+0.07M)` --
+    a delta in different units from the number beside it is a delta nobody can
+    check. `higher` only colours it: on a row where lower is better, a negative
+    move is the good one.
+
+    Silent when there is nothing to compare. A column with no prior run, or a
+    field the prior run could not measure, shows the bare value rather than a
+    `(+0)` that would claim the two were equal.
+    """
+    prev_key = DELTA_OF.get(k)
+    if prev_key is None or value is None:
+        return fmt(value)
+    prev = (src or S).get(prev_key, {}).get(field)
+    if not isinstance(prev, (int, float)) or not isinstance(value, (int, float)):
+        return fmt(value)
+    d = value - prev
+    if d == 0:
+        return f'{fmt(value)}<span class="dlt flat">(&plusmn;0)</span>'
+    sign = "+" if d > 0 else "&minus;"
+    body = fmt(abs(d)).lstrip("+")
+    # `higher is None` is a row with no better or worse -- the same rows `mark`
+    # leaves unmarked. Show the movement, colour it neither way: tinting a raw
+    # count green would be claiming something the row explicitly disclaims.
+    if higher is None:
+        tone = "flat"
+    else:
+        tone = "up" if ((d > 0) if higher else (d < 0)) else "down"
+    return f'{fmt(value)}<span class="dlt {tone}">({sign}{body})</span>'
+
+
 def mrow(label, field, fmt, higher=True, strong=False, hint=None, src=None):
     src = src or S
     v = {k: src[k].get(field) for k in KEYS}
     lab = f"<strong>{label}</strong>" if strong else label
     if hint:
         lab += f'<span class="mh">{hint}</span>'
-    cells = "".join(f'<td class="n{mark(k, v, higher)}">{fmt(v[k])}</td>' for k in KEYS)
+    cells = "".join(
+        f'<td class="n{mark(k, v, higher)}">{delta(k, field, fmt, v[k], src, higher)}</td>'
+        for k in KEYS
+    )
     return f"<tr><td class='ml'>{lab}</td>{cells}</tr>"
 
 
@@ -706,6 +808,13 @@ td.id .sub { display:block; font:400 11px/1.45 "Segoe UI",sans-serif; color:var(
   margin-top:3px; }
 .mh { display:block; font:400 11.5px/1.45 "Segoe UI",sans-serif; color:var(--muted);
   font-weight:400; margin-top:3px; }
+/* How far a superseded column moved. Deliberately quieter than the value it
+   annotates -- the number is the reading, the delta is context for it. */
+.dlt { margin-left:5px; font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  white-space:nowrap; letter-spacing:-.1px; }
+.dlt.up   { color:var(--pass); }
+.dlt.down { color:var(--low); }
+.dlt.flat { color:var(--muted); font-weight:400; }
 td.passc{color:var(--pass)} td.highc{color:var(--high)} td.midc{color:var(--mid)}
 td.lowc{color:var(--low)} td.failc{color:var(--fail)}
 td.gapbig { color:var(--sig); font-weight:700; }
@@ -1025,12 +1134,24 @@ HTML = f"""<title>Four harnesses, one suite</title>
   <b>{gap * 100:.1f} points</b> while costing
   <b>{(1 - S["dsh"]["proxy_cost_point"] / S["pflash"]["proxy_cost_point"]) * 100:.0f}% less per
   point</b> at the same prices.</p>
-  <p class="lede"><b>It is not a clean controlled pair, and the identity rows are why.</b>
-  dsh asks the model to think &mdash; <span class="mono">thinking:{{type:enabled}},
-  reasoning_effort:high</span> on every one of its calls. Perpetum sends
-  <span class="mono">{{model, stream, tool_choice}}</span> and nothing else, on all 1,231 of its
-  calls to the same model. So the gap is <em>harness plus thinking mode</em>, and this page
-  cannot separate them. Turning thinking on for Perpetum is the one experiment that would.</p>
+  <p class="lede"><b>It is now a controlled pair, which it was not before.</b> Both sides ask the
+  model to think, with the same words: <span class="mono">thinking:{{type:enabled}},
+  reasoning_effort:high</span>. Read off the captured request bodies, 1,276 of this round's 1,386
+  completion calls carry both &mdash; the other 110 are its <span class="mono">ds-pro</span>
+  verifier, which declares no effort. The round this column superseded sent
+  <span class="mono">{{model, stream, tool_choice}}</span> and nothing else on all 1,231 of its
+  calls, so the gap then was <em>harness plus thinking mode</em> and this page could not separate
+  them. That experiment has now been run, and it moved this column
+  <b>{(S["pflash"]["combined"] - S["pflash_old"]["combined"]) * 100:+.1f} points</b>. The
+  <b>{gap * 100:.1f}-point</b> gap that remains is the harness.</p>
+  <p class="lede"><b>One thing this pair does not control for.</b> This round also moved its
+  verifier and mutator to <span class="mono">deepseek-v4-pro</span>, because with coder and
+  verifier on one link <span class="mono">V-5</span> refuses every review as self-review &mdash;
+  across every earlier round on this page, <em>not one step was independently reviewed</em>. So
+  this is the first column here whose process scores describe reviewed work, and the price of that
+  is a second changed variable. Review is not what closed the gap: on the tasks both rounds
+  scored, excluding the five that the <span class="mono">L-131</span> defect had depressed, the
+  two are within noise of each other.</p>
 </header>
 
 <section>
@@ -1301,11 +1422,12 @@ HTML = f"""<title>Four harnesses, one suite</title>
   rounds wrote to NTFS. For a suite this shell-heavy the second difference probably matters more
   than the first, and it favours dsh. Neither is quantified here; both are reasons not to read the
   speed rows as a pure harness comparison.</p>
-  <p class="note"><b>Perpetum+Flash is one task short of a single sitting.</b> 105 of its 106 tasks
-  ran on 16 Aug within a 4.1-hour window; <span class="mono">008-image-recognize</span> is dated a
-  week earlier, 9 Aug. That one task is also one of the round's three zeros, so a straggler from
-  different conditions is sitting in the distribution. The wall-clock figure above spans both and
-  is therefore the round's provenance, not its runtime.</p>
+  <p class="note"><b>Perpetum+Flash ran in one sitting.</b> All {S["pflash"]["files"]} of its result
+  files were written on {_window("pflash")[0]} inside a {_window("pflash")[1]:.1f}-hour window, so the
+  wall-clock figure above is the round's runtime and not merely its provenance. The round this column
+  superseded could not say that: 105 of its 106 tasks ran in one 4.1-hour window and
+  <span class="mono">008-image-recognize</span> was dated a week earlier &mdash; a straggler from
+  different conditions sitting in the distribution, and one of that round's three zeros.</p>
 </section>
 
 <section>
