@@ -1,6 +1,6 @@
 """Build docs/build/comparisson.html from `tools/four-rounds.json`.
 
-Four rounds side by side. Every number here is read off a result file; where a
+Five rounds side by side. Every number here is read off a result file; where a
 round could not measure something the cell is a dash, never a default.
 """
 import json, math, os, pathlib, statistics, html, datetime, sys, collections
@@ -12,9 +12,13 @@ D = json.loads(pathlib.Path("tools/four-rounds.json").read_text(encoding="utf-8"
 # Applied to proxy token counts it reproduces Perpetum+Flash's journalled charge
 # to within 0.2%, which is what licenses using it on dsh -- the one round that
 # keeps no journal to charge against.
-PRICES = {"opus": (0.50, 5.00, 25.00), "deepseek-v4-flash": (0.0028, 0.14, 0.28)}
+PRICES = {"opus": (0.50, 5.00, 25.00), "deepseek-v4-flash": (0.0028, 0.14, 0.28),
+          # Same rates as `opus`, keyed by the full name a Claude Code
+          # transcript records. Imputed: the round ran on a seat.
+          "claude-opus-5": (0.50, 5.00, 25.00)}
 PRICE_OF = {"grok": None, "pflash": "deepseek-v4-flash",
             "dsh": "deepseek-v4-flash", "opus": "opus",
+            "cc": "claude-opus-5",
             # The shadow run priced like the column it is a delta against, or a
             # cost delta would compare a priced round to an unpriced one.
             "pflash_old": "deepseek-v4-flash"}
@@ -34,6 +38,14 @@ RUNS = [
               "between them is the harness."),
     dict(key="opus",   label="Perpetum+Opus",  harness="perpetum", model="opus (claude-cli)",
          link="claude-cli", note="Perpetum driving Opus through the Claude Code CLI on subscription. Regraded pass."),
+    dict(key="cc",     label="Claude Code+Opus 5", harness="claude-code", model="claude-opus-5",
+         link="cli", note="Claude Code as a <em>harness</em>, not as a model endpoint &mdash; its own "
+              "loop, its own tools, its own context management, at "
+              "<span class=\"mono\">--effort high</span>. The column to its left reaches the same "
+              "model through the same CLI but strips the agent out "
+              "(<span class=\"mono\">--tools \"\"</span>, harness system prompt), so the two Opus "
+              "columns measure different things: Perpetum's loop driving a bare model, and Claude "
+              "Code driving itself."),
 ]
 # Identity, with where each value came from:
 #   harness_ver  -- `perp --version` for the surviving binary; git describe in
@@ -71,6 +83,15 @@ IDENTITY = {
         thinking="not observable", effort="medium<span class=\"sub\">declared</span>",
         wire_note="&mdash;<span class=\"sub\">a claude-cli link is a subprocess; no request body is captured</span>",
         link="claude-cli<span class=\"sub\">subscription</span>", ran="2026-08-08"),
+    "cc": dict(
+        harness="Claude Code", harness_ver="2.1.234",
+        model_cfg="claude-opus-5", wire_model="claude-opus-5",
+        thinking="enabled", effort="high<span class=\"sub\">--effort high</span>",
+        wire_note="&mdash;<span class=\"sub\">not proxyable: it authenticates a subscription, so it "
+                  "is a subprocess rather than an address. Tokens here are read from the "
+                  "transcript Claude Code writes itself &mdash; 1,897 priced requests &mdash; "
+                  "which carries the tool results the wire never would</span>",
+        link="generic_cli<span class=\"sub\">subscription seat</span>", ran="2026-08-19"),
 }
 
 KEYS = [r["key"] for r in RUNS]
@@ -79,7 +100,7 @@ TOTAL_TASKS = 106
 # A column that reports how far it moved, and the run it moved from. The prior
 # run is loaded and summarised exactly like a rendered one but stays out of
 # KEYS, so best/worst marking, the shared-task set and the frontier all still
-# see four rounds.
+# see every rendered round.
 #
 # Deltas are paired: the prior run's summary is computed over only the tasks
 # *both* rounds scored. Without that, a sum like total tokens would diff 101
@@ -216,6 +237,7 @@ for k in KEYS + SHADOW:
     proc = vals(k, "process")
     inp = sum(r["inp"] for r in rs)
     cr = sum(r["cache_read"] for r in rs)
+    cw_all = sum(r["cache_write"] for r in rs)
     out_t = sum(r["out"] for r in rs)
     tot = sum(r["total_tokens"] for r in rs)
     tcalls = sum(r["tool_calls"] or 0 for r in rs) or None
@@ -249,7 +271,14 @@ for k in KEYS + SHADOW:
         elapsed_total=sum(el) / 60 if el else None,
         sec_mean=mean(el), sec_median=statistics.median(el) if el else None,
         inp=inp, cache_read=cr, out=out_t, total=tot,
-        cache_hit=(cr / (cr + inp)) if (cr + inp) else None,
+        # Cache writes belong in the denominator or the rate is not a rate.
+        # Only Claude Code reports them (the others come back 0, so this leaves
+        # them bit-identical), and it also reports `input_tokens` as *only* the
+        # uncached remainder -- 3,792 tokens across a 78M-token round. Dividing
+        # by cache reads plus that remainder alone scored it 100.0%, marked it
+        # best in class, and measured its token accounting rather than its
+        # cache behaviour.
+        cache_hit=(cr / (cr + inp + cw_all)) if (cr + inp + cw_all) else None,
         inp_task=inp / len(rs) if rs else None, out_task=out_t / len(rs) if rs else None,
         requests=sum(r["requests"] for r in rs) or None,
         tool_calls=tcalls, tool_results=tres, tool_failed=tfail,
@@ -417,7 +446,7 @@ def title_of(t):
 
 # ---------------------------------------------------------------- metric table
 def mark(key, values, higher_better=True):
-    """Green best, red worst, across the four cells of one row.
+    """Green best, red worst, across the cells of one row.
 
     `higher_better=None` means the row has no better or worse and is left
     unmarked. Two rows pass it deliberately -- "not yet run", whose own hint
@@ -958,7 +987,7 @@ for label, field, fmt in [("combined", "combined", lambda v: pct(v)),
             "".join(f'<td class="n{mark(k, v, higher)}">{fmt(v[k])}</td>' for k in KEYS) + "</tr>")
 wv = {k: wins[k] for k in KEYS}
 h2h += ('<tr><td class="ml"><strong>tasks won outright</strong>'
-        f'<span class="mh">plus {ties} ties across all four</span></td>' +
+        f'<span class="mh">plus {ties} ties across all five</span></td>' +
         "".join(f'<td class="n{mark(k, wv, True)}">{wins[k]}</td>' for k in KEYS) + "</tr>")
 
 band_rows = ""
@@ -1001,7 +1030,7 @@ zero_html = "".join(
     f'<td class="why" colspan="4">{why}</td></tr>'
     for lbl, t, why in zeros) or '<tr><td colspan="5" class="dim">no round scored a zero</td></tr>'
 
-# Where the suite loses its points. Sorted on the total across all four rounds
+# Where the suite loses its points. Sorted on the total across all five rounds
 # so the table is one Pareto of the benchmark, not four stacked on each other.
 dom_loss = {k: collections.Counter() for k in KEYS}
 for k in KEYS:
@@ -1105,6 +1134,16 @@ for k in KEYS:
 
 pareto_head = "".join(f'<th class="bh">{r["label"]}</th>' for r in RUNS)
 
+# Who leads is read from the shared set rather than written down, because it has
+# already changed once: this table compared every domain against dsh until a
+# fifth round was added and dsh stopped being the round to compare against.
+LEADER = max(KEYS, key=lambda k: C[k]["combined"] or 0)
+LEADER_LABEL = next(x["label"] for x in RUNS if x["key"] == LEADER)
+RUNNER_UP = max((k for k in KEYS if k != LEADER), key=lambda k: C[k]["combined"] or 0)
+RUNNER_UP_LABEL = next(x["label"] for x in RUNS if x["key"] == RUNNER_UP)
+ORACLE_TOP = max(KEYS, key=lambda k: S[k]["oracle_rate"] or 0)
+ORACLE_TOP_LABEL = next(x["label"] for x in RUNS if x["key"] == ORACLE_TOP)
+
 # domains where the shared-set leader is not the overall leader
 flips = []
 for b in DOMAIN_ORDER:
@@ -1113,9 +1152,9 @@ for b in DOMAIN_ORDER:
         continue
     v = {k: mean(vals(k, "combined", ts)) for k in KEYS}
     top = max(v, key=lambda k: v[k] or 0)
-    if top != "dsh":
+    if top != LEADER:
         lbl = next(x["label"] for x in RUNS if x["key"] == top)
-        flips.append((b, lbl, v[top], v["dsh"], len(ts)))
+        flips.append((b, lbl, v[top], v[LEADER], len(ts)))
 
 flip_html = "".join(
     f'<tr><td class="ml">{b}<span class="mh">{n} shared tasks</span></td>'
@@ -1126,15 +1165,15 @@ flip_html = "".join(
 # controlled pair
 gap = C["dsh"]["combined"] - C["pflash"]["combined"]
 
-HTML = f"""<title>Four harnesses, one suite</title>
+HTML = f"""<title>Five rounds, one suite</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>{CSS}</style>
 <div class="wrap">
 
 <header>
   <p class="eyebrow">HarnessBench &middot; {len(COMMON)} shared tasks</p>
-  <h1>Four rounds, side by side &mdash; and the one variable nobody held still</h1>
-  <p class="lede">Two harnesses, four model backings, one 106-task suite. Every number
+  <h1>Five rounds, side by side &mdash; and the one variable nobody held still</h1>
+  <p class="lede">Three harnesses, five rounds, one 106-task suite. Every number
   below is read off the runner's own result files. Where a round could not measure
   something the cell is a dash, never a default &mdash; a subscription link journals no
   charge, and a fabricated zero would rank it first.</p>
@@ -1189,7 +1228,7 @@ HTML = f"""<title>Four harnesses, one suite</title>
 </section>
 
 <section>
-  <h2>Every metric the four rounds record</h2>
+  <h2>Every metric the five rounds record</h2>
   <p class="lede">Green is best in row, red worst. Rows where "best" is meaningless are left
   unmarked. Each round is on its own denominator here &mdash; see the head-to-head below for
   the shared-task cut.</p>
@@ -1199,7 +1238,15 @@ HTML = f"""<title>Four harnesses, one suite</title>
     <tbody>{"".join(metric_rows)}</tbody>
   </table>
   </div>
-  <p class="note" style="margin-top:16px"><b>Two cost routes, and they agree where both exist.</b>
+  <p class="note" style="margin-top:16px"><b>Claude Code counts its input differently, and the
+  input rows show it.</b> Its transcript reports <span class="mono">input_tokens</span> as only
+  the uncached remainder &mdash; <b>3,792 tokens across the whole 78M-token round</b>, which is
+  why <em>input / task</em> rounds to 0K in that column. It is not a round that sent almost no
+  input; it is a round whose input arrived as 68.7M cache reads and 5.6M cache writes, both
+  counted in their own rows. It is also the only round reporting cache writes at all, so
+  <em>cache write</em> is a dash everywhere else rather than a zero. Compare the four columns on
+  total tokens and cost, which are on the same footing, rather than on input.</p>
+  <p class="note"><b>Two cost routes, and they agree where both exist.</b>
   The journal route prices the charges Perpetum recorded; the proxy route prices the tokens the
   usage proxy counted, both against the same per-MTok table the six-backend report uses. For
   Perpetum+Flash they land on ${S["pflash"]["imputed"]:.4f} and ${S["pflash"]["proxy_cost"]:.4f}
@@ -1232,7 +1279,7 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
 <section>
   <h2>Head to head on the {len(COMMON)} shared tasks</h2>
-  <p class="lede">The honest cut &mdash; every round restricted to the tasks all four have
+  <p class="lede">The honest cut &mdash; every round restricted to the tasks all five have
   scored, so no round is credited for a task another never reached.</p>
   <div class="scroll mtbl" style="margin-top:16px">
   <table>
@@ -1244,7 +1291,7 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
 <section>
   <h2>By domain</h2>
-  <p class="lede">The suite's own grouping, restricted to shared tasks. The sub-line gives the range of outcome scores across the four rounds &mdash; a wide range is a domain the harness choice actually decides.</p>
+  <p class="lede">The suite's own grouping, restricted to shared tasks. The sub-line gives the range of outcome scores across the five rounds &mdash; a wide range is a domain the harness choice actually decides.</p>
   <div class="scroll mtbl">
   <table>
     <thead><tr><th>&nbsp;</th>{head_cells}</tr></thead>
@@ -1255,20 +1302,23 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
 <section>
   <h2>Where the ranking turns over</h2>
-  <p class="lede">dsh leads the suite, and it does not lead everywhere. Two metrics and
+  <p class="lede">{LEADER_LABEL} leads the suite, and it does not lead everywhere.
   {len(flips)} of the nine domains put a different round on top &mdash; which is the difference
-  between "the better harness" and "the harness that wins this average". A third finding below
-  applies to all four equally.</p>
+  between "the better harness" and "the harness that wins this average". A finding below
+  applies to all five equally.</p>
   <div class="scroll" style="margin-top:16px">
   <table>
     <thead><tr><th>domain</th><th class="bh">leader</th><th class="bh">its score</th>
-    <th class="bh">dsh+Flash</th><th class="bh">margin</th></tr></thead>
+    <th class="bh">{LEADER_LABEL}</th><th class="bh">margin</th></tr></thead>
     <tbody>{flip_html}</tbody>
   </table>
   </div>
-  <p class="note" style="margin-top:16px"><b>The oracle pass rate does not agree with the
-  combined score.</b> Counting checks rather than averaging task scores puts
-  <b>Perpetum+Grok first at {S["grok"]["oracle_rate"] * 100:.1f}%</b>, ahead of dsh's
+  <p class="note" style="margin-top:16px"><b>The oracle pass rate agrees on the leader and on
+  almost nothing else.</b> Counting checks rather than averaging task scores also puts
+  <b>{ORACLE_TOP_LABEL} first, at {S[ORACLE_TOP]["oracle_rate"] * 100:.1f}%</b> &mdash; but the
+  order beneath it inverts: <span class="mono">Perpetum+Grok</span> is second on checks at
+  {S["grok"]["oracle_rate"] * 100:.1f}% while third on the combined score, and
+  <span class="mono">dsh+Flash</span> is second on the combined score while fourth on checks at
   {S["dsh"]["oracle_rate"] * 100:.1f}%. The combined score weights every task equally; the pass
   rate weights every check equally, so a round that half-finishes many-check tasks and a round
   that cleanly fails few-check ones swap places. Neither is wrong. They answer different
@@ -1375,7 +1425,7 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
   <h3 class="sub">Pareto &mdash; where the points are lost</h3>
   <p class="lede" style="margin-bottom:14px">Points forfeited (1 &minus; combined) per domain,
-  summed across all four rounds and sorted. The cumulative column is this benchmark's own 80/20.</p>
+  summed across all five rounds and sorted. The cumulative column is this benchmark's own 80/20.</p>
   <div class="scroll mtbl">
   <table>
     <thead><tr><th>domain</th>{pareto_head}
@@ -1387,13 +1437,14 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
 <section>
   <h2>The machine underneath</h2>
-  <p class="lede">One laptop, two environments. The three Perpetum rounds ran natively on Windows;
+  <p class="lede">One laptop, two environments. Four rounds ran natively on Windows &mdash; the three
+  Perpetum ones and Claude Code;
   the dsh round ran inside WSL2 on the same silicon. That is not a like-for-like bench host, and
   the differences that could plausibly move a number are named below rather than left implicit.</p>
   <div class="scroll mtbl" style="margin-top:16px">
   <table>
     <thead><tr><th>&nbsp;</th>
-      <th class="bh">Windows host<small>Perpetum+Grok, +Flash, +Opus</small></th>
+      <th class="bh">Windows host<small>Perpetum+Grok, +Flash, +Opus; Claude Code+Opus 5</small></th>
       <th class="bh">WSL2 guest<small>dsh+Flash</small></th></tr></thead>
     <tbody>
       <tr><td class="ml">operating system</td><td class="id">Windows 11 Home<span class="sub">10.0.26200, build 26200</span></td><td class="id">Ubuntu 24.04.4 LTS<span class="sub">kernel 6.18.33.2-microsoft-standard-WSL2</span></td></tr>
@@ -1478,7 +1529,7 @@ HTML = f"""<title>Four harnesses, one suite</title>
 
 <footer>
   Built {now} from <span class="mono">data_try6/results/</span> &mdash;
-  {len(D["rows"])} result files across four rounds, {len(COMMON)} tasks shared by all.
+  {len(D["rows"])} result files across five rounds, {len(COMMON)} tasks shared by all.
   Regenerate with <span class="mono">extract.py</span> then <span class="mono">gen_comparison.py</span>.
 </footer>
 </div>

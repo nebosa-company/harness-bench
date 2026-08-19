@@ -43,6 +43,15 @@ RUNS = [
          price="deepseek-v4-flash"),
     dict(key="opus",   label="Perpetum+Opus",  rel="perpetum-opus/opus",
          harness="perpetum", model="opus", link="claude-cli",  regraded=True, price="opus"),
+    # The fifth round is the only one where Claude Code runs as a *harness*
+    # rather than as a model endpoint: it keeps its own loop, tools and context
+    # management. `perpetum-opus` reaches the same model through the same CLI
+    # but strips the agent out (`--tools ""`, harness system prompt), so the two
+    # Opus columns are not a repeat of each other.
+    dict(key="cc",     label="Claude Code+Opus 5",
+         rel="claude-code-opus5-high/claude-opus-5",
+         harness="claude-code", model="claude-opus-5", link="cli", regraded=False,
+         price="claude-opus-5"),
 ]
 
 # A tool result counts as failing when it carries one of these. Deliberately
@@ -69,6 +78,9 @@ FAIL_PAT = re.compile(
 # (cache-read, input, output)
 PRICES = {
     "opus": (0.50, 5.00, 25.00),
+    # Same rates as `opus`; keyed by the full name because that is what a Claude
+    # Code transcript records and the table matches exactly.
+    "claude-opus-5": (0.50, 5.00, 25.00),
     "sonnet": (0.30, 3.00, 15.00),
     "deepseek-v4-pro": (0.003625, 0.435, 0.87),
     "deepseek-v4-flash": (0.0028, 0.14, 0.28),
