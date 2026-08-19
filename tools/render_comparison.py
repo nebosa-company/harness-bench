@@ -28,7 +28,10 @@ RUNS = [
               "verifier is not, and it is the first round here where review actually ran "
               "&mdash; every earlier round had `V-5` refuse it as self-review."),
     dict(key="dsh",    label="dsh+Flash",      harness="dsh", model="deepseek-v4-flash",
-         link="api", note="DeepSeek's own harness on the same model &mdash; but with thinking enabled at high effort, which Perpetum never sent."),
+         link="api", note="DeepSeek's own harness on the same model, and now with the same thinking "
+              "settings too &mdash; the column to its left sends the identical "
+              "<span class=\"mono\">reasoning_effort:high</span> pairing, so what is left "
+              "between them is the harness."),
     dict(key="opus",   label="Perpetum+Opus",  harness="perpetum", model="opus (claude-cli)",
          link="claude-cli", note="Perpetum driving Opus through the Claude Code CLI on subscription. Regraded pass."),
 ]
@@ -462,6 +465,12 @@ def delta(k, field, fmt, value, src=None, higher=True):
         return f'{fmt(value)}<span class="dlt flat">(&plusmn;0)</span>'
     sign = "+" if d > 0 else "&minus;"
     body = fmt(abs(d)).lstrip("+")
+    # A row formatted `x / N` is a count against a fixed denominator, and the
+    # delta is a change in x -- not a change in the ratio. Rendered with the
+    # row's own formatter it came out as `(+1 / 106)`, which reads as one task
+    # in a hundred and six rather than one more than last time.
+    if " / " in body:
+        body = body.split(" / ", 1)[0]
     # `higher is None` is a row with no better or worse -- the same rows `mark`
     # leaves unmarked. Show the movement, colour it neither way: tinting a raw
     # count green would be claiming something the row explicitly disclaims.
