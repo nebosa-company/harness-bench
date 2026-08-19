@@ -765,8 +765,14 @@ def run_task(app: AppConfig, task: TaskSpec, model_id: str, model_cfg: dict[str,
                 "cache_write_tokens": cache_w,
                 "total_tokens": cc_totals["total_tokens"],
                 "providers": ["anthropic"],
+                # `<synthetic>` is Claude Code's own label for a turn it wrote
+                # itself rather than one a model answered -- an interruption
+                # notice, say. It is not a model, and counting it split a round
+                # into a `synthetic+claude-opus-5` results directory and would
+                # have offered it to the price table as something to look up.
                 "models": sorted({m for m in (str(r.get("model") or "").strip()
-                                              for r in cc_rounds) if m}),
+                                              for r in cc_rounds)
+                                  if m and not m.startswith("<")}),
                 # This round authenticates a subscription, so no metered spend
                 # occurred. The priced figure is what the same tokens would have
                 # cost on the API -- useful for comparing against metered rounds,
