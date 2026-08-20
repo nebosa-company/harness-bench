@@ -36,3 +36,6 @@ reports/*
 tools/report-data.json
 tools/report.html
 tools/*.log
+
+# Round logs: transient, and large.
+*.log
