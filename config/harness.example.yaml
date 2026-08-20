@@ -129,6 +129,46 @@
           "price": { "cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28 }
         }
       },
+      # NOTE: coder and verifier on one link means **nothing is ever reviewed**.
+      # `V-5` refuses a review where the reviewer is the author, which is right,
+      # but the round then closes every step on the coder's own claim. Measured
+      # across four HarnessBench rounds: Grok and Flash closed 106 and 103 steps
+      # with no gate running at all (`L-64`), and Opus reached the review stage
+      # 114 times and was refused every one -- *"claude would be reviewing its
+      # own work."* Every process score from those rounds measures unreviewed
+      # work. This entry is left single-link because it is the smallest thing
+      # that runs, and because splitting it silently would make the cheapest
+      # config quietly cost twice as much.
+      #
+      # To actually review, name a second link and point `verifier` at it. It
+      # need not be a bigger model -- it must not be the author:
+      #
+      #   "links": {
+      #     "deepseek": { "kind": "deepseek", "model": "deepseek-v4-flash", ... },
+      #     "ds-pro":   { "kind": "deepseek", "model": "deepseek-v4-pro",   ... }
+      #   },
+      #   "roles": {
+      #     "coder": "deepseek", "chat": "deepseek",
+      #     "verifier": "ds-pro", "mutator": "ds-pro"
+      #   },
+      #   "result_slug": "deepseek-v4-flash",
+      #
+      # `result_slug` is not optional once you do that, and it is the half that
+      # is easy to miss. Results are filed under
+      # `results/<entry>/<api-model>/`, and with more than one link there is no
+      # single "the" model -- `_resolve_api_slug` falls through to whichever
+      # model answered *last* in the proxy log, which for a round with its own
+      # verifier is usually the verifier. Both rounds that added a second link
+      # lost their directory to this: `perpetum-grok` filed all 106 tasks under
+      # `unknown-api/`, and a reviewed DeepSeek round split 16/1 across
+      # `deepseek-v4-pro/` and `deepseek-v4-flash/`. Nothing errors -- a
+      # collector reading one of them just sees part of a round. Name it for
+      # the coder: that is what is under test, the verifier is scaffolding.
+      #
+      # Declare `mutator` while you are there. Without one `perp observe`
+      # refuses with "role.mutator: has no chain" and the mutator collects
+      # nothing for the entire suite -- which happened to two rounds on file
+      # before anyone noticed.
       "roles": { "coder": "deepseek", "chat": "deepseek", "verifier": "deepseek" },
       # On, because `usage-proxy/responses/` is what the process rubric reads.
       # The adapter marks its routes `stream`, so the proxy relays tokens as
@@ -138,6 +178,86 @@
       # process rubric is skipped.
       "use_usage_proxy": true,
       "budget": { "cycle_money": 1.00, "batch_money": 1.00 },
+      "map_budget": 0
+    },
+
+    # The entry above, with the two changes the note on it describes: a second
+    # link so review is not self-review, and a `result_slug` so the round has
+    # somewhere to file its results. Everything else is identical, which is the
+    # point -- it is the smallest config that actually reviews anything.
+    #
+    # It also carries `effort` on an OpenAI-shaped link. That is `M-47`: before
+    # it, `link.effort` was validated for every kind and consumed only on the
+    # `claude-cli` path, so a `deepseek` or `grok` link parsed it, accepted it,
+    # and sent nothing. Measured across two rounds, all 1,231 DeepSeek and 1,113
+    # Grok request bodies went out as `{model, stream, tool_choice}`.
+    "perpetum-deepseek-reviewed": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-reviewed",
+      "timeout_sec": 1800,
+      "links": {
+        "deepseek": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-flash",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "effort": "high",
+          "price": { "cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28 }
+        },
+        "ds-pro": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-pro",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87 }
+        }
+      },
+      "roles": {
+        "coder": "deepseek", "chat": "deepseek",
+        "verifier": "ds-pro", "mutator": "ds-pro"
+      },
+      "result_slug": "deepseek-v4-flash",
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
+      "map_budget": 0
+    },
+
+    # The same shape with the coder at another vendor, which is the stronger
+    # form of `V-5`'s independence: a different lab reading the work rather than
+    # a larger model from the same one.
+    #
+    # `first_token_seconds` is raised because Grok reasons before emitting a
+    # first token, and `M-23`'s default of 20 read that silence as a dead link.
+    # In a single-link chain there was nowhere to fail over to, so the task
+    # blocked and scored zero -- one round's only zero, diagnosed from a journal
+    # note reading "said nothing for 20s".
+    "perpetum-grok": {
+      "adapter": "perpetum",
+      "command": "perp",
+      "session_prefix": "harnessbench-perp-grok",
+      "timeout_sec": 1800,
+      "links": {
+        "grok": {
+          "kind": "grok",
+          "model": "grok-4.6",
+          "auth_env": "XAI_API_KEY",
+          "first_token_seconds": 90,
+          "effort": "high",
+          "price": { "cache_hit": 0.5, "cache_miss": 2.0, "output": 6.0 }
+        },
+        "ds-pro": {
+          "kind": "deepseek",
+          "model": "deepseek-v4-pro",
+          "auth_env": "DEEPSEEK_API_KEY",
+          "price": { "cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87 }
+        }
+      },
+      "roles": {
+        "coder": "grok", "chat": "grok",
+        "verifier": "ds-pro", "mutator": "ds-pro"
+      },
+      "result_slug": "grok-4.6",
+      "use_usage_proxy": true,
+      "budget": { "cycle_money": 5.00, "batch_money": 5.00 },
       "map_budget": 0
     },
 

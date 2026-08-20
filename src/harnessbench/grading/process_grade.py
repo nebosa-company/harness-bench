@@ -228,6 +228,37 @@ def compute_scoring(
     trace = extract_proxy_trace_incremental(proxy_dir)
     trace_error = trace.get("error")
 
+    # Claude Code cannot be put behind the proxy -- it authenticates a
+    # subscription, so it is a subprocess rather than an address -- but it does
+    # write a full transcript of every turn and tool call, including the tool
+    # results the wire never carries. Read that when the wire came back empty,
+    # the same way the journal is preferred just below. Without this the rubric
+    # is skipped and a round that ran perfectly scores nothing at all.
+    if trace_error:
+        try:
+            from harnessbench.extract_claude_code_session import (
+                extract_claude_code_session,
+                session_file_for_workspace,
+            )
+            merged = None
+            for cc_path in session_file_for_workspace(sandbox / "workspace"):
+                part = extract_claude_code_session(cc_path)
+                if part.get("error") or not part.get("rounds"):
+                    continue
+                if merged is None:
+                    merged = part
+                    continue
+                # A multi-round task is one run split across transcripts; the
+                # rubric judges the run, so they are joined rather than ranked.
+                merged["rounds"].extend(part["rounds"])
+                merged["unified_transcript"].extend(part["unified_transcript"])
+                for k, v in part["totals"].items():
+                    merged["totals"][k] = merged["totals"].get(k, 0) + v
+            if merged is not None:
+                trace, trace_error = merged, None
+        except Exception:
+            pass  # a missing or malformed transcript leaves the wire verdict alone
+
     # Prefer Perpetum's journal over the wire, when there is one.
     #
     # Not a fallback any more — measured on 003-browser, the proxy trace was 2
